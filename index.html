@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>QR Pixel Solver</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="panel controls-panel">
+        <h1>QR Pixel Solver</h1>
+
+        <form id="qr-form">
+          <div class="field-row">
+            <label for="version">Version</label>
+            <select id="version" name="version">
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+              <option value="6">6</option>
+              <option value="7">7</option>
+              <option value="8">8</option>
+              <option value="9">9</option>
+              <option value="10">10</option>
+              <option value="11">11</option>
+              <option value="12">12</option>
+              <option value="13">13</option>
+              <option value="14">14</option>
+              <option value="15">15</option>
+              <option value="16">16</option>
+              <option value="17">17</option>
+              <option value="18">18</option>
+              <option value="19">19</option>
+              <option value="20">20</option>
+              <option value="21">21</option>
+              <option value="22">22</option>
+              <option value="23">23</option>
+              <option value="24">24</option>
+              <option value="25">25</option>
+              <option value="26">26</option>
+              <option value="27">27</option>
+              <option value="28">28</option>
+              <option value="29">29</option>
+              <option value="30">30</option>
+              <option value="31">31</option>
+              <option value="32">32</option>
+              <option value="33">33</option>
+              <option value="34">34</option>
+              <option value="35">35</option>
+              <option value="36">36</option>
+              <option value="37">37</option>
+              <option value="38">38</option>
+              <option value="39">39</option>
+              <option value="40">40</option>
+            </select>
+          </div>
+
+          <div class="field-row">
+            <label for="errorCorrection">Error correction</label>
+            <select id="errorCorrection" name="errorCorrection">
+              <option value="L">L</option>
+              <option value="M">M</option>
+              <option value="Q">Q</option>
+              <option value="H">H</option>
+            </select>
+          </div>
+
+          <div class="field-row">
+            <label for="mask">Mask</label>
+            <select id="mask" name="mask">
+              <option value="0">0</option>
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+              <option value="6">6</option>
+              <option value="7">7</option>
+            </select>
+          </div>
+
+          <div class="field-row">
+            <label for="mode">Mode</label>
+            <select id="mode" name="mode">
+              <option value="byte">Byte</option>
+              <option value="numeric">Numeric</option>
+              <option value="alphanumeric">Alphanumeric</option>
+            </select>
+          </div>
+
+          <div class="field-row">
+            <label for="payload">Payload text</label>
+            <input id="payload" name="payload" type="text" value="hello" />
+          </div>
+
+          <div class="field-row actions">
+            <button type="submit">Solve</button>
+            <button type="button" class="secondary" id="resetGrid">Reset</button>
+          </div>
+        </form>
+
+        <div id="solverStatus" class="status" aria-live="polite">
+          Ready.
+        </div>
+      </section>
+
+      <section class="panel canvas-panel">
+        <div class="canvas-wrap">
+          <svg id="qrSvg" aria-label="Editable QR code" role="img"></svg>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
