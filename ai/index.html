@@ -85,15 +85,44 @@
           <div class="field-row">
             <label for="mode">Mode</label>
             <select id="mode" name="mode">
-              <option value="byte">Byte</option>
-              <option value="numeric">Numeric</option>
+              <option value="byte" selected>Byte</option>
               <option value="alphanumeric">Alphanumeric</option>
+              <option value="numeric">Numeric</option>
             </select>
           </div>
 
           <div class="field-row">
-            <label for="payload">Payload text</label>
-            <input id="payload" name="payload" type="text" value="hello" />
+            <label for="payload">URL prefix</label>
+            <input id="payload" name="payload" type="text" value="so-whisperity.github.io?" />
+          </div>
+
+          <div class="field-row">
+            <label for="wildcardLength">Wildcard chars</label>
+            <input id="wildcardLength" name="wildcardLength" type="number" min="0" max="32" value="3" />
+          </div>
+
+          <div class="field-row">
+            <label for="paddingMode">Padding policy</label>
+            <select id="paddingMode" name="paddingMode">
+              <option value="strict">Strict</option>
+              <option value="pad-free">Pad free</option>
+              <option value="loose">Loose</option>
+            </select>
+          </div>
+
+          <div class="field-row diagnostics-panel">
+            <div class="diagnostic-header">
+              <strong>Capacity</strong>
+              <span id="capacityStatus" class="capacity-status">OK</span>
+            </div>
+            <div class="capacity-bar" aria-label="QR data usage breakdown">
+              <div id="headerBar" class="segment header-segment" title="Header bits"></div>
+              <div id="contentBar" class="segment content-segment" title="Data bits"></div>
+              <div id="terminatorBar" class="segment terminator-segment" title="Terminator bits"></div>
+              <div id="eccBar" class="segment ecc-segment" title="Error correction reserve"></div>
+              <div id="paddingBar" class="segment padding-segment" title="Padding bits"></div>
+            </div>
+            <div id="capacityText" class="capacity-text">0 / 0 bits used</div>
           </div>
 
           <div class="field-row actions">

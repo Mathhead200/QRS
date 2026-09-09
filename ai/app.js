@@ -1,12 +1,31 @@
-import { makeInputBitDefinitions, solveQrModules } from './qrs.js';
+import {
+  buildQrMessagePlan,
+  countModeEncodedBitsForChars,
+  generateQrModuleMatrix,
+  getMaxCharsForModeAndVersion,
+  getQrDataModuleCoordinates,
+  getQrMessageCapacityBits,
+  makeInputBitDefinitions,
+  solveQrModules,
+} from './qrs.js';
 
 const versionSelect = document.querySelector('#version');
 const errorCorrectionSelect = document.querySelector('#errorCorrection');
 const maskSelect = document.querySelector('#mask');
 const modeSelect = document.querySelector('#mode');
 const payloadInput = document.querySelector('#payload');
+const wildcardLengthInput = document.querySelector('#wildcardLength');
+const paddingModeSelect = document.querySelector('#paddingMode');
+const capacityStatus = document.querySelector('#capacityStatus');
+const capacityText = document.querySelector('#capacityText');
+const headerBar = document.querySelector('#headerBar');
+const contentBar = document.querySelector('#contentBar');
+const terminatorBar = document.querySelector('#terminatorBar');
+const eccBar = document.querySelector('#eccBar');
+const paddingBar = document.querySelector('#paddingBar');
 const qrSvg = document.querySelector('#qrSvg');
 const form = document.querySelector('#qr-form');
+const submitButton = form.querySelector('button[type="submit"]');
 const statusBox = document.querySelector('#solverStatus');
 
 const WHITE = 'white';
@@ -269,12 +288,90 @@ function textToPayloadBits(text) {
   return bits;
 }
 
+function getMessagePlan() {
+  return buildQrMessagePlan({
+    prefixText: payloadInput.value || '',
+    wildcardLength: Number(wildcardLengthInput.value || 0),
+    mode: modeSelect.value,
+    version: state.version,
+    errorCorrection: state.errorCorrection,
+    paddingMode: paddingModeSelect.value,
+  });
+}
+
+function getCapacitySummary() {
+  const size = getVersionSize(state.version);
+  const totalDataBits = getQrDataModuleCoordinates(size).length;
+  const payloadCapacityBits = getQrMessageCapacityBits({
+    version: state.version,
+    errorCorrection: state.errorCorrection,
+  });
+  const charCountBitsLength = state.version <= 9 ? 8 : 16;
+  const headerBits = 4 + charCountBitsLength;
+  const prefixChars = (payloadInput.value || '').length;
+  const wildcardChars = Number(wildcardLengthInput.value || 0);
+  const prefixBits = countModeEncodedBitsForChars(prefixChars, state.mode);
+  const wildcardBits = countModeEncodedBitsForChars(wildcardChars, state.mode);
+  const dataBits = prefixBits + wildcardBits;
+  const terminatorBits = Math.min(4, Math.max(0, payloadCapacityBits - headerBits - dataBits));
+  const paddingBits = Math.max(0, payloadCapacityBits - headerBits - dataBits - terminatorBits);
+  const eccReserveBits = Math.max(0, totalDataBits - payloadCapacityBits);
+
+  return {
+    totalDataBits,
+    payloadCapacityBits,
+    headerBits,
+    dataBits,
+    terminatorBits,
+    eccReserveBits,
+    paddingBits,
+    capacityStatusText: headerBits + dataBits <= payloadCapacityBits ? 'OK' : 'Too long',
+  };
+}
+
+function updateCapacityDiagnostics() {
+  const summary = getCapacitySummary();
+  const total = Math.max(summary.totalDataBits, 1);
+  const isTooLong = summary.headerBits + summary.dataBits > summary.payloadCapacityBits;
+
+  headerBar.style.width = `${(summary.headerBits / total) * 100}%`;
+  contentBar.style.width = `${(summary.dataBits / total) * 100}%`;
+  terminatorBar.style.width = `${(summary.terminatorBits / total) * 100}%`;
+  eccBar.style.width = `${(summary.eccReserveBits / total) * 100}%`;
+  paddingBar.style.width = `${(summary.paddingBits / total) * 100}%`;
+
+  capacityStatus.textContent = summary.capacityStatusText;
+  capacityStatus.classList.toggle('warn', isTooLong);
+  submitButton.disabled = isTooLong;
+  submitButton.title = isTooLong ? 'Selected payload exceeds QR capacity for this version and ECC level.' : 'Solve the current QR constraints.';
+
+  const usedMessageBits = summary.headerBits + summary.dataBits;
+  if (isTooLong) {
+    const overflow = usedMessageBits - summary.payloadCapacityBits;
+    capacityText.textContent = `${usedMessageBits} payload bits used / ${summary.payloadCapacityBits} available. Over by ${overflow} bits.`;
+  } else {
+    const remaining = Math.max(0, summary.payloadCapacityBits - usedMessageBits);
+    capacityText.textContent = `${usedMessageBits} payload bits used / ${summary.payloadCapacityBits} available (${remaining} bits remain; ${summary.eccReserveBits} ECC bits reserved, ${summary.paddingBits} QR padding bits).`;
+  }
+
+  headerBar.title = `${summary.headerBits} header bits`; 
+  contentBar.title = `${summary.dataBits} data bits`;
+  terminatorBar.title = `${summary.terminatorBits} terminator bits`;
+  eccBar.title = `${summary.eccReserveBits} ECC reserve bits`;
+  paddingBar.title = `${summary.paddingBits} padding bits`;
+}
+
 function getTargetPixelsFromGrid() {
   const constraints = [];
   let moduleIndex = 0;
 
   for (const row of state.grid) {
     for (const cell of row) {
+      if (isLockedCell(Math.floor(moduleIndex / state.grid.length), moduleIndex % state.grid.length)) {
+        moduleIndex++;
+        continue;
+      }
+
       if (cell === BLACK) {
         constraints.push({ moduleIndex, value: 1 });
       } else if (cell === WHITE) {
@@ -291,27 +388,20 @@ function getFreeBitIndexesFromGrid() {
   const indexes = [];
   const flat = state.grid.flat();
   for (let i = 0; i < flat.length; i++) {
-    if (flat[i] === FREE) indexes.push(i);
+    const row = Math.floor(i / state.grid.length);
+    const col = i % state.grid.length;
+    if (flat[i] === FREE && !isLockedCell(row, col)) indexes.push(i);
   }
   return indexes;
 }
 
 function buildModuleBitDefinitions() {
-  const size = getVersionSize(state.version);
-  const moduleCount = size * size;
-  const payloadBits = Array(moduleCount).fill(0);
-  const fixedBits = {};
-  const freeBitIndexes = [];
+  const plan = getMessagePlan();
+  const payloadBits = plan.payloadBits;
+  const fixedBits = { ...plan.fixedBits };
+  const freeBitIndexes = [...plan.freeBitIndexes];
 
-  for (let i = 0; i < moduleCount; i++) {
-    const row = Math.floor(i / size);
-    const col = i % size;
-    const cell = state.grid[row][col];
-
-    if (cell === BLACK) fixedBits[i] = 1;
-    else if (cell === WHITE) fixedBits[i] = 0;
-    else freeBitIndexes.push(i);
-  }
+  const bitNames = plan.bitNames ?? Array(payloadBits.length).fill(null);
 
   return {
     payloadBits,
@@ -321,29 +411,33 @@ function buildModuleBitDefinitions() {
       payloadBits,
       fixedBits,
       freeBitIndexes,
+      names: bitNames,
+      namePrefix: 'payload',
     }),
   };
 }
 
-function generateFullGridModuleMatrix(bits) {
-  const size = getVersionSize(state.version);
-  const moduleCount = size * size;
-  const out = new Array(moduleCount).fill(0);
-
-  for (let i = 0; i < Math.min(bits.length, moduleCount); i++) {
-    out[i] = bits[i] & 1;
-  }
-
-  return out;
+function generateRealQrModuleMatrix(bits) {
+  const dataValueBits = Array.from(bits, (value) => value & 1);
+  return generateQrModuleMatrix({
+    version: state.version,
+    errorCorrection: state.errorCorrection,
+    mask: state.mask,
+    payloadBits: dataValueBits,
+  });
 }
 
 function solveQrFromForm() {
   const { payloadBits, fixedBits, freeBitIndexes, bitDefinitions } = buildModuleBitDefinitions();
   const constraints = getTargetPixelsFromGrid();
 
+  if (bitDefinitions.length) {
+    console.log('Bit definitions:', bitDefinitions.map((bit) => ({ name: bit.name, index: bit.index, fixedValue: bit.fixedValue })));
+  }
+
   const result = solveQrModules({
     bitDefinitions,
-    generateModuleMatrix: generateFullGridModuleMatrix,
+    generateModuleMatrix: generateRealQrModuleMatrix,
     constraints,
   });
 
@@ -363,10 +457,25 @@ function solveQrFromForm() {
   console.log('Solver result', result);
 }
 
-versionSelect.addEventListener('change', syncStateFromControls);
-errorCorrectionSelect.addEventListener('change', syncStateFromControls);
-maskSelect.addEventListener('change', syncStateFromControls);
-modeSelect.addEventListener('change', syncStateFromControls);
+versionSelect.addEventListener('change', () => {
+  syncStateFromControls();
+  updateCapacityDiagnostics();
+});
+errorCorrectionSelect.addEventListener('change', () => {
+  syncStateFromControls();
+  updateCapacityDiagnostics();
+});
+maskSelect.addEventListener('change', () => {
+  syncStateFromControls();
+  updateCapacityDiagnostics();
+});
+modeSelect.addEventListener('change', () => {
+  syncStateFromControls();
+  updateCapacityDiagnostics();
+});
+payloadInput.addEventListener('input', updateCapacityDiagnostics);
+wildcardLengthInput.addEventListener('input', updateCapacityDiagnostics);
+paddingModeSelect.addEventListener('change', updateCapacityDiagnostics);
 form.addEventListener('submit', (event) => {
   event.preventDefault();
   solveQrFromForm();
@@ -387,3 +496,4 @@ document.querySelector('#resetGrid').addEventListener('click', () => {
 });
 
 syncStateFromControls();
+updateCapacityDiagnostics();
