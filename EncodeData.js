@@ -1,4 +1,5 @@
 import { QRError } from "./QRError.js"
+import { DataSize } from "./DataSize.js"
 
 export class EncodingError extends QRError {}
 
@@ -18,7 +19,7 @@ export class EncodeData {
 	 * @see https://en.wikipedia.org/wiki/Extended_Channel_Interpretation
 	 */
 	static bytes(bytes) {
-		let data = new Uint8Array(8 * bytes.length);  // uncompressed. each bit gts a full byte of memory.
+		let data = new Uint8Array(DataSize.bytes(bytes.length));  // uncompressed. each bit gts a full byte of memory.
 		for (let i = 0; i < bytes.length; i++) {
 			// encode the bits of each byte in big-endian per QR code spec.
 			for (let j = 7; j >= 0; j--)
@@ -60,7 +61,31 @@ export class EncodeData {
 	 * @see https://www.thonky.com/qr-code-tutorial/alphanumeric-table
 	 */
 	static alphanumeric(str) {
-		return [];  // TODO: stub
+		const charset = "0123456789ABCDEFGHIJKLMNOPQRSTUVQXYZ $%*+-./:";
+		const map = new Map();
+		[...charset].forEach((c, i) => map.set(c, i));
+
+		let data = new Uint8Array(DataSize.alphanumeric(str.length));
+		let next = 0;
+		for (let i = 0; i < str.length; i += 2) {
+			// Split the string into 2 character groups, except maybe the last group which may get truncated.
+			let g = str.substring(i, i + 2);
+
+			let n = map.get(g[0]);
+			let bits = 11;
+			if (g.length === 2)   // 2 character groups get encoded into 11 bits.
+				n = 45 * n + map.get(g[1]);
+			else  // a trailing 1 character group get encoded into 6 bits.
+				bits = 6;
+			
+			if (Number.isNaN(n))
+				throw new EncodingError(`String contains characters outside the alphanumeric mode charset: "${g}" in "${str}"`);
+			
+			// bits within each group are stored big-endian
+			for (let shift = bits - 1; shift >= 0; shift--)
+				data[next++] = (n >>> shift) & 0x1;
+		}
+		return data;
 	}
 
 	/**
@@ -68,7 +93,24 @@ export class EncodeData {
 	 * @return {ArrayLike<number>} An array of bits representing the encoded bitstream.
 	 */
 	static numeric(str) {
-		return [];  // TODO: stub
+		if (/\D/.test(str))
+			throw new EncodingError(`Only 0-9 can be encoded in numeric mode: "${str}"`);
+		let data = new Uint8Array(DataSize.numeric(str.length));
+		let next = 0;
+		for (let i = 0; i < str.length; i += 3) {
+			// Split the number into 3 (decimal) digit groups, except maybe the last group, which may get truncated.
+			// Do *not* remove leading 0's from each group! Only the final group can be less than 3 (decimal) digits.
+			let g = str.substring(i, i + 3);
+
+			// 1, 2, and 3 (decimal) digit numbers get packed into 4, 7, and 10 bits (respectively).
+			let bits = g.length === 3 ? 10 : g.length === 2 ? 7 : 4;
+
+			// bits within each group are stored big-endian
+			n = Number(g);
+			for (let shift = bits - 1; shift >= 0; shift--)
+				data[next++] = (n >>> shift) & 0x1;
+		}
+		return data;
 	}
 
 	/**
@@ -76,6 +118,6 @@ export class EncodeData {
 	 * @returns {ArrayLike<number>} An array of bits representing the encoded bitstream.
 	 */
 	static kanji(str) {
-		return [];  // TODO: stub
+		throw Error("TODO: Unimplemented");  // TODO
 	}
 }

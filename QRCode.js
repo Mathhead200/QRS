@@ -1,14 +1,7 @@
 
 import { QRError } from "./QRError.js"
-
-/**
- * For reporting errors.
- */
-function _modeToString(mode) {
-	if (Number.isInteger(mode) && mode >= 0)
-		return `0x${mode.toString(16)}`;
-	return mode;
-}
+import { hex } from "./util.js"
+import { DataSize } from "./DataSize.js"
 
 /**
  * Represents some error in the QRCode construction.
@@ -20,8 +13,9 @@ export class QRCodeVersionError extends QRCodeError {}
 
 export class QRCodeModeError extends QRCodeError {}
 
-/** Represents some error with the ECI designator. */
-export class ECIError extends QRCodeError {}
+export class ECIDesignatorError extends QRCodeError {}
+
+export class QRCodeDataError extends QRCodeError {}
 
 /**
  * @param {*} version A potentially valid or invalid QRCode version (i.e. size).
@@ -41,12 +35,12 @@ export function validateVersion(version) {
  */
 export function validateMode(mode) {
 	if (!Number.isInteger(mode) || mode < 0x0 || mode > 0xF)
-		throw QRCodeModeError(`Invalid mode: ${_modeToString(mode)}`);
+		throw QRCodeModeError(`Invalid mode: ${hex(mode)}`);
 	return mode;
 }
 
 /**
- * @param {*} characterCount 
+ * @param {*} characterCount A potentially valid or invalid character count.
  * @param {number} version A valid QR code version
  * @param {number} mode A valid data segment mode
  * @returns {number} characterCount (unchanged) for convenience
@@ -57,21 +51,46 @@ export function validateCharacterCount(characterCount, version, mode) {
 		throw QRCodeError(`Invalid character count: ${characterCount}`);
 	let bits = QRCode.characterCountBits(version, mode);
 	if (characterCount < Math.pow(2, bits))
-		throw QRCodeError(`Character count is too large (${bits} bits) for version ${version}, mode ${_modeToString(mode)}: ${characterCount}`);
+		throw QRCodeError(`Character count is too large (${bits} bits) for version ${version}, mode ${hex(mode)}: ${characterCount}`);
 	return characterCount
 }
 
 /**
- * 
- * @param {*} eciDesignator 
- * @returns 
+ * Note: doesn't validate the ECI designator against any established lookup table.
+ * 	Just that it that it's in the correct form.
+ * @param {*} eciDesignator A potentially valid or invalid ECI designator.
+ * @returns {number} eciDesignator (unchanged) for convenience
+ * @throws {ECIDesignatorError} If the eciDesignator is invalid, e.g. wrong leading bits.
+ * @see https://en.wikipedia.org/wiki/Extended_Channel_Interpretation
  */
-export function validateEciDesignator(eciDesignator) {
-	// Stub. Doesn't validate the ECI designator against any established lookup table.
-	// (e.g. see: https://en.wikipedia.org/wiki/Extended_Channel_Interpretation )
+export function validateEciDesignator(eciDesignator) { 
 	if (!Number.isInteger(eciDesignator) || eciDesignator < 0x000000 || eciDesignator > 0xFFFFFF)
-		throw new ECIError(`Invalid ECI designator`)
+		throw new ECIDesignatorError(`Invalid ECI designator`)
+	if (eciDesignator <= 0xFF) {  // validate 8-byte ECI
+		if (eciDesignator >>> 7 !== 0x0)
+			throw new ECIDesignatorError(`8-byte ECI designator must start with leading bits "0...": ${hex(eciDesignator, 2)}`);
+	} else if (eciDesignator <= 0xFFFF) {
+		if (eciDesignator >>> 14 !== 0x2)
+			throw new ECIDesignatorError(`16-byte ECI designator must start with leading bits "10...": ${hex(eciDesignator, 4)}`);
+	} else {
+		if (eciDesignator >>> 21 !== 0x4)
+			throw new ECIDesignatorError(`24-byte ECI designator must start with leading bits "110...: ${hex(eciDesignator, 6)}"`);
+	}
 	return eciDesignator;
+}
+
+/**
+ * @param {*} data Potentially valid or invalid data.
+ * @param {number} mode A valid QR DataSegemnt mode.
+ * @param {number} characterCount A valid AR DataSegment character count.
+ * @returns {ArrayLike<number>} data (unchanged) for convenience.
+ * @throws {QRCodeDataError} If the data isn't valid, e.g. the wrong length (in bits)
+ */
+export function validateData(data, mode, characterCount) {
+	let expectedSize = dataSize(mode, characterCount);
+	if (data?.length !== expectedSize)
+		throw new QRCodeDataError(`Data is invalid. Expected ${expectedSize} bits. Actual: ${data?.length}`);
+	return data;
 }
 
 /**
@@ -107,6 +126,15 @@ export function characterCountBits(version, mode) {
 	throw QRCodeError(`Couldn't determine characterCountBits for verion ${version}, mode ${QRCode._modeToString(mode)}`);
 }
 
+export function dataSize(mode, characterCount) {
+	return new Map([
+		[ Segment.NUMERIC,      DataSize.numeric      ],
+		[ Segment.ALPHANUMERIC, DataSize.alphanumeric ],
+		[ Segment.BYTE,         DataSize.bytes        ],
+		[ Segment.KANJI,        DataSize.kanji        ]
+	]).get(mode)(characterCount);
+}
+
 /**
  * In a QR code bitstream, there a three main types of segments:
  * Data:
@@ -119,37 +147,78 @@ export function characterCountBits(version, mode) {
  */
 export class Segment {
 	// Modes:
-	static NULL         = 0x0;  // 0000
-	static NUMERIC      = 0x1;  // 0001
-	static ALPHANUMERIC = 0x2;  // 0010
-	static BYTE         = 0x4;  // 0100
-	static ECI          = 0x7;  // 0111
-	static KANJI        = 0x8;  // 1000
+	static NULL              = 0x0;  // 0000
+	static NUMERIC           = 0x1;  // 0001
+	static ALPHANUMERIC      = 0x2;  // 0010
+	static STRUCTURED_APPEND = 0x3;  // 0011  (TODO)
+	static BYTE              = 0x4;  // 0100
+	static FNC1_1            = 0x5;  // 0101  (TODO)
+	static ECI               = 0x7;  // 0111
+	static KANJI             = 0x8;  // 1000
+	static FNC1_2            = 0x9;  // 1001  (TODO)
 
 	constructor(qrCode, mode) {
 		this.qrCode = qrCode;  // the parent QRCode this segment will be attached to
 		this.mode = validateMode(mode);
 	}
+
+	appendMode(buffer, offset = 0) {
+		// TODO: append mode to bit stream buffer starting at index 0
+	}
+
+	bitStream() {
+		throw new Error("Abstract method");
+	}
 }
 
 export class DataSegment extends Segment {
-	constructor(qrCode, mode, characterCount) {
+	constructor(qrCode, mode, characterCount, data) {
 		super(qrCode, mode);
-		this.characterCount = validateCharacterCount(this.qrCode.version, this.mode, characterCount);
-		this.data = []
+		this.characterCount = validateCharacterCount(characterCount, qrCode.version, mode);
+		this.data = validateData(data, mode, characterCount);  // {ArrayList<number>} an (uncompressed) bit stream containing 0 or 1 elements only
+	}
+
+	appendCharacterCount(buffer, offset = 4) {
+		// TODO: ...
+	}
+
+	appendData(buffer, offset) {
+		// TODO: ...
+	}
+
+	bitStream() {
+		let ccBits = characterCountBits(this.qrCode.version, this.mode);
+		let buffer = new Uint8Array(4 + ccBits + this.data.length);
+		this.appendMode(buffer, 0);
+		this.appendCharacterCount(buffer, 4);
+		this.appendData(buffer, 4 + ccBits);
+		return buffer;
 	}
 }
 
 export class ECISegment extends Segment {
 	constructor(qrCode, eciDesignator) {
 		super(qrCode, Segment.ECI);
-		this.eciDesignator = eciDesignator;
+		this.eciDesignator = validateEciDesignator(eciDesignator);
 	}
+
+	// TODO: ...
+}
+
+export class NullSegment extends Segment {
+	constructor(qrCode) {
+		super(qrCode, Segment.NULL);
+	}
+
+	// TODO: ...
 }
 
 export class QRCode {
-	constructor(version, characterCount) {
+	constructor(version) {
 		this.version = validateVersion(version);
-		this.segments = [];
+		this.segments = [];  // {ArrayList<Segment>}
+		this.padding = [];  // {ArrayList<number>} an (uncompressed) bit stream containing 0 or 1 elements only
 	}
+
+	// TODO: ...
 }
