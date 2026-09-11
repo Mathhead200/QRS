@@ -17,6 +17,10 @@ export class ECIDesignatorError extends QRCodeError {}
 
 export class QRCodeDataError extends QRCodeError {}
 
+export class QRCodeECLevelError extends QRCodeError {}
+
+export class QRCodePaddingError extends QRCodeError {}
+
 /**
  * @param {*} version A potentially valid or invalid QRCode version (i.e. size).
  * @returns {number} version (unchanged) for convenience
@@ -88,9 +92,115 @@ export function validateEciDesignator(eciDesignator) {
  */
 export function validateData(data, mode, characterCount) {
 	let expectedSize = dataSize(mode, characterCount);
+	if (expectedSize === undefined)
+		throw new QRCodeDataError(`Could not determine expected data length. (Is this a data mode?): ${mode}`)
 	if (data?.length !== expectedSize)
 		throw new QRCodeDataError(`Data is invalid. Expected ${expectedSize} bits. Actual: ${data?.length}`);
+	for (let i = 0; i < data.length; i++)
+		if (data[i] !== 0 && data[i] !== 1)
+			throw new QRCodeDataError(`All elements in data array must be 0 or 1: ${data[i]}`);
 	return data;
+}
+
+/**
+ * @param {*} ecLevel Potantially valid or invalid error code level. 
+ * @returns {str} ecLevel (unchanged) for convenience
+ * @throws {QRCodeECLevelError} If the ecLevel is invalid, i.e. not one of LMQH
+ */
+export function validateECLevel(ecLevel) {
+	if (!new Set("LMQH").has(ecLevel))
+		throw new QRCodeECLevelError(`Invalid error code level. Expected L, M, Q, or H: "${ecLevel}"`);
+	return ecLevel;
+}
+
+/**
+ * @param {*} segments Potentally valid of invalid Segments
+ * @param {number} size == 8 * (maximum codewords) for a specific QRCode
+ * @returns {ArrayLike<Segment>} segments (unchanged) for convenience
+ * @throws {QRError} If the segments array is invalid, e.g. too long, missing expected NullTerminator
+ */
+export function validateSegments(segments, size) {
+	if (Number.isInteger(segments?.length))
+		throw new QRCodeError(`Expected ArrayLike: ${segments}`);
+
+	let sum = 0;
+	let eci = false;  // was the last segment an ECI segment?
+	for (let i = 0; i < segments.length; i++) {
+		let s = segments[i];
+		
+		// Does this element look like a segment?
+		if (!Number.isInteger(s?.size) || s.size < 0 || typeof s.bitStream !== "function")
+			throw new QRError(`Expected Segment: ${s}`);
+		// validated: s, s.size, s.bitStream
+
+		// Check for misc. NullSegments
+		if (validateMode(s.mode) === Segment.NULL)  // may throw QRCodeModeError extends QRCodeError
+			if (i != segments.length - 1)
+				throw new QRCodeError(`NullSegment expected only at end the array (${segments.length - 1}): ${i}`);
+		// validated: s.mode
+
+		// Validate DataSegments
+		if (s.data != undefined) {
+			validateData(s.data,                                   // may throw QRCodeDataError extends QRCodeError
+				s.mode, validateCharacterCount(s.characterCount,   // may throw QRCodeError
+					validateVersion(s.qrCode?.version), s.mode));  // may throw QRCodeVersionError extends QRCodeError
+			// validated: s.data, s.characterCount, s.qrCode, s.qrCode.version
+		}
+
+		// Validate ECISegment, DataSegment pairings
+		if (s.mode === Segment.ECI) {
+			eci = true;
+		} else if (eci) {
+			if (s.data === undefined)
+				throw new QRCodeError(`Expected DataSegment immediated following ECISegment: ${s}`)
+			eci = false;
+		}
+
+		sum += s.size;
+	}
+
+	if (eci)
+		throw new QRCodeError(`QRCode can't end with an ECI segment: ${segments}`);
+
+	let rem = size - sum;
+	if (rem < 0)
+		throw new QRCodeError(`QRCode is too long. Maximum capacity is ${size}: ${sum}`);
+	if (rem > 0) {
+		let last = segments[segments.length - 1];
+		let nullBits = Math.min(rem, 4);
+		if (last?.mode !== Segment.NULL)
+			throw new QRError(`Missing required NullSegement: ${rem}`);
+		if (last.size !== nullBits)
+			throw new QRCodeError(`Expected NullSegment to have ${nullBits} bits: ${last.size}`);
+	}
+
+	return segments;
+}
+
+/**
+ * @param {*} padding Potentially valid or invalid padding
+ * @param {ArrayLike<Segment>} segments A valid sequence of QRCode segments
+ * @param {number} size == 8 * (maximum codewords) for a specific QRCode'
+ * @returns {ArrayLike<number>} padding (unchanged) for convenience
+ * @throws {QRCodePaddingError} If the padding is invalid. Does *not* enforce strict QR Code spec. rules for padding.
+ */
+export function validatePadding(padding, segments, size) {
+	if (!Number.isInteger(padding?.length))
+		throw new QRCodePaddingError(`Expected ArrayLike: ${padding}`);
+
+	// reduced available size by total size of segements
+	for (let i = 0; i < segments.length; i++)
+		size -= segments[i].size;
+	if (padding.length !== size)
+		throw new QRCodePaddingError(`Padding is the wrong size (${size}): ${padding.length}`);
+
+	for (let i = 0; i < padding.length; i++) {
+		let p = padding[i];  // 1 bit of padding
+		if (p !== 0 && p !== 1)
+			throw new QRCodePaddingError(`All elements in padding must be 0 or 1: ${p}`);
+	}
+
+	return padding;
 }
 
 /**
@@ -133,12 +243,13 @@ export function characterCountBits(version, mode) {
  * @returns {number} The number of bits for the encoded data
  */
 export function dataSize(mode, characterCount) {
-	return new Map([
+	let f = new Map([
 		[ Segment.NUMERIC,      DataSize.numeric      ],
 		[ Segment.ALPHANUMERIC, DataSize.alphanumeric ],
 		[ Segment.BYTE,         DataSize.bytes        ],
 		[ Segment.KANJI,        DataSize.kanji        ]
-	]).get(mode)(characterCount);
+	]).get(mode);
+	return f ? f(characterCount) : undefined;
 }
 
 /**
@@ -312,26 +423,36 @@ export class NullSegment extends Segment {
 }
 
 export class QRCode {
+	// Error correction levels (see QR code spec., ISO 18004)
+	L = "L";  // low (7%)
+	M = "M";  // medium (15%)
+	Q = "Q";  // "QR" (25%)
+	H = "H";  // high (30%)
+
 	/**
 	 * @param {number} QRCode version (i.e. grid size)
+	 * @param {str} ecLevel Error correction level: L, M, Q, or H
 	 * @param {ArrayLike<Segment>} segments The segment(s) in this QRCode.
-	 *	A NullSegment is required at the end if there is padding.
+	 *	A 4-bit NullSegment is required at the end if there is padding.
 	 * @param {ArrayLike<number>} padding The QR code spec. specifies what these padding bits should be exactly,
-	 *	however, this program supports non-standard padding as well. Non-standard padding bits will not be rejected.
-	 *	Only the size of the buffers will be validated.
+	 *	however, this program supports non-standard padding as well. Non-standard padding bits will *not* be rejected.
+	 *	Only the size of the buffers will be evalidated.
 	 */
-	constructor(version, segments, padding) {
+	constructor(version, ecLevel, segments, padding = null) {
 		this.version = validateVersion(version);
-
-		/**
-		 * @type {ArrayList<Segment>}
-		 */
-		this.segments = [];
-
-		/**
-		 * @type {ArrayLike<number>}
-		 */
-		this.padding = [];  // {ArrayList<number>} an (uncompressed) bit stream containing 0 or 1 elements only
+		this.ecLevel = validateECLevel(ecLevel);
+		this.size = 13 * 8;  // TODO: stub
+		this.segments = validateSegments(segments, this.size);
+		if (padding !== null) {
+			this.padding = validatePadding(padding);
+		} else {
+			// Generate standard padding per QR Code spec., ISO 18004.
+			let size = this.size;
+			for (let i = 0; i < segments.length; i++)
+				size -= segments[i].size;
+			this.padding = new Uint8Array(size);
+			// TODO: ...
+		}
 	}
 
 	/**
@@ -339,7 +460,11 @@ export class QRCode {
 	 * @returns {ArrayLike<number>}
 	 */
 	bitStream() {
-		let bits = 13 * 8;  // TODO: (stub) determine toal number of bits
-		for 
+		let buffer = new Uint8Array(this.size);
+		let pos = 0;
+		for (let i = 0; i < this.segments.length; i++)
+			pos = appendBuffer(this.segments[i].bitStream(), buffer, pos);
+		pos = appendBuffer(this.padding, buffer, pos);
+		return buffer;
 	}
 }
