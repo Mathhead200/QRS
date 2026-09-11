@@ -119,7 +119,7 @@ export function validateECLevel(ecLevel) {
  * @returns {ArrayLike<Segment>} segments (unchanged) for convenience
  * @throws {QRError} If the segments array is invalid, e.g. too long, missing expected NullTerminator
  */
-export function validateSegments(segments, size) {
+export function validateSegments(segments, version, size) {
 	if (Number.isInteger(segments?.length))
 		throw new QRCodeError(`Expected ArrayLike: ${segments}`);
 
@@ -141,10 +141,14 @@ export function validateSegments(segments, size) {
 
 		// Validate DataSegments
 		if (s.data != undefined) {
-			validateData(s.data,                                   // may throw QRCodeDataError extends QRCodeError
-				s.mode, validateCharacterCount(s.characterCount,   // may throw QRCodeError
-					validateVersion(s.qrCode?.version), s.mode));  // may throw QRCodeVersionError extends QRCodeError
-			// validated: s.data, s.characterCount, s.qrCode, s.qrCode.version
+			if (validateVersion(s.version) !== version)  // may throw QRCodeVersionError extends QRCodeError
+				throw new QRError(`Expected a segment for QR code version (${version}): ${s.version}`);
+			// validated: s.version
+
+			validateData(s.data,                                  // may throw QRCodeDataError extends QRCodeError
+				s.mode, validateCharacterCount(s.characterCount,  // may throw QRCodeError
+					s.version, s.mode));
+			// validated: s.data, s.characterCount
 		}
 
 		// Validate ECISegment, DataSegment pairings
@@ -314,8 +318,7 @@ export class Segment {
 	static KANJI             = 0x8;  // 1000
 	static FNC1_2            = 0x9;  // 1001  (TODO)
 
-	constructor(qrCode, mode) {
-		this.qrCode = qrCode;  // the parent QRCode this segment will be attached to
+	constructor(mode) {
 		this.mode = validateMode(mode);
 		this.size = 4;  // override in subclasses -- size of cannonical bit stream
 	}
@@ -339,9 +342,10 @@ export class DataSegment extends Segment {
 	 * @param {number} characterCount 
 	 * @param {ArrayLike<number>} data An (uncompressed) bit stream containing 0 or 1 elements only
 	 */
-	constructor(qrCode, mode, characterCount, data) {
-		super(qrCode, mode);
-		this.characterCount = validateCharacterCount(characterCount, qrCode.version, mode);
+	constructor(version, mode, characterCount, data) {
+		super(mode);
+		this.version = validateVersion(version);
+		this.characterCount = validateCharacterCount(characterCount, version, mode);
 		this.data = validateData(data, mode, characterCount);
 		this.size = 4 + characterCountBits(this.qrCode.version, this.mode) + this.data.length;
 	}
@@ -380,10 +384,10 @@ export class ECISegment extends Segment {
 	 * @param {QRCode} qrCode 
 	 * @param {number} eciDesignator 
 	 */
-	constructor(qrCode, eciDesignator) {
-		super(qrCode, Segment.ECI);
+	constructor(eciDesignator) {
+		super(Segment.ECI);
 		this.eciDesignator = validateEciDesignator(eciDesignator);
-		this.size = 4 + eciDesignatorBits(this.eciDesignator);
+		this.size = 4 + eciDesignatorBits(eciDesignator);
 	}
 
 	/**
@@ -409,8 +413,8 @@ export class NullSegment extends Segment {
 	/**
 	 * @param {QRCode} qrCode 
 	 */
-	constructor(qrCode, bits = 4) {
-		super(qrCode, Segment.NULL);
+	constructor(bits = 4) {
+		super(Segment.NULL);
 		this.size = bits;  // since the NullSegment may be truncated or missing if there is no padding.
 	}
 
@@ -426,7 +430,7 @@ export class QRCode {
 	// Error correction levels (see QR code spec., ISO 18004)
 	L = "L";  // low (7%)
 	M = "M";  // medium (15%)
-	Q = "Q";  // "QR" (25%)
+	Q = "Q";  // quartile (25%)
 	H = "H";  // high (30%)
 
 	/**
@@ -441,18 +445,35 @@ export class QRCode {
 	constructor(version, ecLevel, segments, padding = null) {
 		this.version = validateVersion(version);
 		this.ecLevel = validateECLevel(ecLevel);
-		this.size = 13 * 8;  // TODO: stub
+		this.size = 8 * 13;  // TODO: stub -- must be a multiple of 8
 		this.segments = validateSegments(segments, this.size);
-		if (padding !== null) {
-			this.padding = validatePadding(padding);
-		} else {
-			// Generate standard padding per QR Code spec., ISO 18004.
-			let size = this.size;
-			for (let i = 0; i < segments.length; i++)
-				size -= segments[i].size;
-			this.padding = new Uint8Array(size);
-			// TODO: ...
-		}
+		this.padding = padding !== null ? validatePadding(padding) : this.standardPadding();
+	}
+
+	/**
+	 * Generates the standard padding per QR Code spec., ISO 18004.
+	 * @return {Uint8Array} An uncompress bit stream containing just the padding that would be standard for this QRCode.
+	 */
+	standardPadding() {
+		// calculate size of required padding
+		let size = this.size;
+		for (let i = 0; i < this.segments.length; i++)
+			size -= this.segments[i].size;
+		let padding = new Uint8Array(size);
+		
+		// if the padding size is unaligned (i.e. not a multiple of 8),
+		// align by prepending 0's at the front (i.e. immediately following the null segment)
+		let offset = size % 8;
+		for (let i = 0; i < offset; i++)
+			padding[i] = 0;
+
+		// fill remaining space with standard pattern defined in spec.
+		let pattern = "1110 1100 0001 0001";
+		pattern = [...pattern].filter(c => "01".includes(c)).map(Number);  // [1, 1, 1, 0, ...]
+		for (let i = 0; offset + i < size; i++)
+			padding[offset + i] = pattern[i % pattern.length];
+
+		return padding;
 	}
 
 	/**
