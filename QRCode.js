@@ -1,7 +1,8 @@
 
-import { QRError } from "./QRError.js"
-import { hex } from "./util.js"
 import { DataSize } from "./DataSize.js"
+import { QRError } from "./QRError.js"
+import { ReedSolomon } from "./ReedSolomon.js";
+import { contiguousTensor, hex } from "./util.js"
 
 /**
  * Represents some error in the QRCode construction.
@@ -297,6 +298,24 @@ function appendBuffer(x, buffer, offset) {
 }
 
 /**
+ * Inserts the given matrix, submat, into the larger matrix.
+ * @param {ArrayLike<ArrayLike>} submat
+ * @param {ArrayLike<ArrayLike>} matrix
+ * @param {number} row_offset
+ * @param {number} col_offset
+ * @returns {[number, number]} [row_offset, col_offset] The new offsets in the matrix where the append ended (in both dimension).
+ */
+function appendMatrix(submat, matrix, row_offset = 0, col_offset = 0) {
+	let longest_row = 0;
+	for (let i = 0; i < submat.length; i++) {
+		for (let j = 0; j < submat[i].length; j++)
+			matrix[row_offset + i][col_offset + j] = submat[i][j];
+		longest_row = Math.max(submat[i].length, longest_row);
+	}
+	return [row_offset + submat.length, col_offset + longest_row];
+}
+
+/**
  * In a QR code bitstream, there a three main types of segments:
  * Data:
  * 		These kind hold data. (e.g. Numeric, Alphanumberic, Byte, Kanji)
@@ -508,5 +527,33 @@ export class QRCode {
 		}
 		pos = appendBuffer(this.padding, buffer, pos);
 		return buffer;
+	}
+
+	/**
+	 * Generate the bit matrix that would transform this QRCode.bitStream() into the bit stream with error correction codes
+	 * per the QR code spec.
+	 * @returns {ArrayLike<ArrayLike<number>>} an uncompressed bit matrix in GF(2) with each element being a 0 or 1.
+	 */
+	ecMatrix() {
+		const rows = this.size + this.ecBits;
+		const cols = this.size;
+		let matrix = contiguousTensor(Uint8Array, [rows, cols]);
+
+		const g = this.g1 + this.g2;
+		let i = 0;
+		let r = 0;  // cumulative row position
+		let c = 0;  // cumulative column position
+		for (; i < this.g1; i++) {
+			let submatrix_i = ReedSolomon.matrix(this.k1, this.E);
+			[r, c] = appendMatrix(submatrix_i, matrix, r, c);
+		}
+		for (; i < g; i++) {
+			let submatrix_i = ReedSolomon.matrix(this.k2, this.E)
+			[r, c] = appendMatrix(submatrix_i, matrix, r, c);
+		}
+
+		// TODO: row swaps
+
+		return matrix;
 	}
 }
