@@ -1,147 +1,47 @@
-
-/**
- * Math for Galios Field, GF(256)
- */
-export class GF256 {
-	/** Similar to log table, but for powers of 0x02. */
-	static _exps = new Map();
-
-	/**
-	 * Log table for each principle polynomial.
-	 * Maps (principle polynomial) -> Array[256]
-	 * The array stores each GF(256) log (base 0x02).
-	 */
-	static _logs = new Map();
-
-	/**
-	 * Dynamic programming cache for generator polynomials.
-	 * Maps (principle polynomial) -> Array
-	 * The array stores each generator polynomial up to the last computed degree, 0 to E.
-	 */
-	static _generators = new Map();
-
-	static _ensureExpLog(P) {
-		if (GF256._logs.get(P) === undefined) {
-			// generate full log table once for each principle polynomial
-			let exps = new Array(255);
-			let logs = new Array(256);
-			let prod = 0x01;
-			for (let pow = 0; pow < 255; pow++) {
-				exps[pow] = prod;
-				logs[prod] = pow;
-				prod = GF256.mul2(prod, P);
-			}
-			logs[0] = NaN;  // log(0) is undefined
-			GF256._exps.set(P, exps);
-			GF256._logs.set(P, logs);
-		}
-	}
-
-	/**
-	 * Multiply x by 0x02 in  GF(256).
-	 * @param {number} x uint8
-	 * @param {number} P principle polynomial for GF(256) as uint9
-	 * @returns {number} uint8
-	 */
-	static mul2(x, P = 0x11D) {
-		x &= 0xFF;
-		let prod = (x << 1) & 0xFF;
-		if (x & 0x80)
-			prod ^= P & 0xFF;
-		return prod;
-	}
-
-	static mul(a, b, P = 0x11D) {
-		if (a === 0 || b === 0)
-			return 0;
-		return GF256.exp((GF256.log(a, P) + GF256.log(b, P)) % 255, P);
-	}
-
-	static pow(a, x, P = 0x11D) {
-		if (a === 0)
-			return 0;
-		return GF256.exp((GF256.log(a, P) * x) % 255, P);
-	}
-
-	static exp(x, P = 0x11D) {
-		GF256._ensureExpLog(P);
-		return GF256._exps.get(P)[x % 255];
-	}
-
-	static log(x, P = 0x11D) {
-		GF256._ensureExpLog(P);
-		return GF256._logs.get(P)[x & 0xFF];
-	}
-
-	/**
-	 * @param {number} E number of error correction bytes
-	 * @param {number} P principle polynomial
-	 * @returns {ArrayLike<number>} coeficients of the generator polynomial of degree E in big-endian (i.e. "standard") order
-	 */
-	static generator(E, P = 0x11D) {
-		let generators = GF256._generators.get(P);
-		if (generators === undefined)
-			GF256._generators.set(P, generators = [[1]]);
-		if (E < generators.length)
-			return generators[E];  // already solved
-		
-		// solve recursively
-		let c = GF256.generator(E - 1, P);  // recursion: previous coefs
-		let coefs = new Array(E + 1);
-		coefs[0] = c[0];
-		const alpha = GF256.exp(E - 1, P);  // next root: 0x02 ** (E - 1)
-		for (let i = 1; i < E; i++)
-			coefs[i] = c[i] ^ GF256.mul(c[i - 1], alpha, P);
-		coefs[E] = GF256.mul(c[E - 1], alpha, P);
-
-		return generators[E] = coefs;  // store result
-	}
-}
+import { GF256 } from "./GF256.js";
 
 /**
  * Used to apply the Reed-Solomon error correction used by QR codes.
  */
 export class ReedSolomon {
 	/**
-	 * 
-	 * @param {number} k Message size, i.e. the number of bytes per block
-	 * @param {number} E Parity size/EC symbols, i.e. number of "check" bytes added to each block
-	 * @param {number} P Primitive polynomial. Must be
-	 * 	1. 8th degree, i.e. 0x100 <= P < 0x200
-	 * 	2. Primative over GF(256), i.e. 0x02^k (mod PP) generates the full field for 0 <= k < 256
-	 * 	There are 16 valid 8th degree primitive polynomials for GF(256).
-	 * 	The primitive polynomial defined by the QR code spec., ISO 18004,
-	 * 	and the cannonical choice for Reed-Solomon in general is 0x11D.
-	 * 
-	 * @returns {ArrayLike<ArrayLike<number>>} a matrix of bytes in GF(256)
+	 * @param {number} k Message size, i.e. the number of *bytes* per block
+	 * @param {number} E Parity size/EC symbols, i.e. number of "check" *bytes* added to each block
+	 * @param {GF256} gf Galios Field, GF(256), includes a primitive polynomial, P, and a specific generator, alpha. 
+	 * @returns {ArrayLike<ArrayLike<number>>} a matrix of bits in GF(2)
 	 */
-	static matrix(k, E, P = 0x11D) {
-		const rows = k + E;
-		const cols = k;
+	static matrix(k, E, gf = GF256.QR) {
+		const rows = 8 * (k + E);
+		const cols = 8 * k;
 		let buffer = new Uint8Array(rows * cols);
 
-		// Build top of half of matrix: identity matrix, I_8k
+		// Build top of half of matrix: identity matrix, I_{8k}
 		for (let i = 0; i < cols; i++)
 			buffer[i * cols + i] = 0x01;  // matrix[i][i] = 0x01
 
-		// Build bottom of half of matrix using polynomial division
-		const generator = GF256.generator(E, P);  // length === E + 1
-		for (let i = 0; i < k; i++) {
+		// Build bottom of half of matrix using polynomial division (divide all basis polynomials by generator)
+		const generator = gf.generator(E);  // length === E + 1, e.g. (gf = GF265.QR, E=2) generator = (0x01)x^2 + (0x03)x + (0x02)
+		for (let j = 0; j < k; j++) {
 			// each basis block associates with a column in the output matrix
-			let basis = new Array(k - i + E).fill(0);
-			basis[0] = 0x01;
+			let rem = new Array(k - j + E).fill(0);  // start as basis polynomial, e.g. (k=3, E=2, i=0), rem = (0x01)x^4 + (0x00)x^3 + ... + (0x00)
+			rem[0] = 0x01;
 
 			// polynomial division
-			while (basis.length > E) {
-				if (basis[0] !== 0)
-					for (let j = 0; j <= E; j++)
-						basis[j] ^= GF256.mul(basis[0], generator[j], P);
-				basis.shift();
-			}
+			while (rem.length > E) {  // Basis stores the remainder as we proceed with the division algorithm. Stop when the degree of the remainder gets too small. e.g. deg(basis) == basis.length - 1 == 4 > (E=2)
+				if (rem[0] !== 0)     // Skip this divide-multiply-subtract step if leading term is 0.
+					for (let i = E - 1; i >= 0; i--)  // generator[0] is always 1, so skip division for efficiency. NOTE: loop is backwards to avoid thrashing rem[0]!
+						rem[i] ^= gf.mul(rem[0], generator[i]);  // Multiply leading term of remainder (basis[0]) by divisor (generator), and subtract (XOR) to get the new remainder. e.g. [(0x01)x^4 + ...] - (0x01) * [(0x01)x^2 + (0x03)x + (0x02)] = [(0x01)x^4 + (0x00)x^3 + (0x01)x^2 + (0x03)x + (0x02)]
+				rem.shift();  // Remove leading term. This is the quotient, and we don't care about it. e.g. shift (0x01)x^4 --> basis = (0x00)x^3 + (0x01)x^2 + (0x03)x + (0x02)
+			}  // Repeat, e.g. next iteration will skip since (0x00)x^3 is 0, and obly shift off that term, etc. 
 
-			// store remainder (basis) as column
-			for (let j = 0; j < E; j++)
-				buffer[(k + j) * cols + i] = basis[j];
+			// convert the remainder's coefs. to their associated mul. matrices in GF(2) and store as column of output transformation matrix
+			// ASSERT: rem.length === E
+			for (let i = 0; i < E; i++) {
+				let submatrix_ij = gf.gf2_matrix(rem[i]);  // 8-by-8
+				for (let i_offset = 0; i_offset < 8; i_offset++)
+					for (let j_offset = 0; j_offset < 8; j_offset++)
+						buffer[(8 * (k + i) + i_offset) * cols + (8 * j + j_offset)] = submatrix_ij[i_offset][j_offset];
+			}
 		}
 
 		// Convert to 2D array of arrays interface

@@ -87,7 +87,7 @@ export function validateEciDesignator(eciDesignator) {
  * @param {*} data Potentially valid or invalid data.
  * @param {number} mode A valid QR DataSegemnt mode.
  * @param {number} characterCount A valid AR DataSegment character count.
- * @returns {ArrayLike<number>} data (unchanged) for convenience.
+ * @returns {ArrayLike} data (unchanged) for convenience.
  * @throws {QRCodeDataError} If the data isn't valid, e.g. the wrong length (in bits)
  */
 export function validateData(data, mode, characterCount) {
@@ -96,9 +96,9 @@ export function validateData(data, mode, characterCount) {
 		throw new QRCodeDataError(`Could not determine expected data length. (Is this a data mode?): ${mode}`)
 	if (data?.length !== expectedSize)
 		throw new QRCodeDataError(`Data is invalid. Expected ${expectedSize} bits. Actual: ${data?.length}`);
-	for (let i = 0; i < data.length; i++)
-		if (data[i] !== 0 && data[i] !== 1)
-			throw new QRCodeDataError(`All elements in data array must be 0 or 1: ${data[i]}`);
+	// for (let i = 0; i < data.length; i++)
+	// 	if (data[i] !== 0 && data[i] !== 1)
+	// 		throw new QRCodeDataError(`All elements in data array must be 0 or 1: ${data[i]}`);
 	return data;
 }
 
@@ -185,7 +185,7 @@ export function validateSegments(segments, version, size) {
  * @param {*} padding Potentially valid or invalid padding
  * @param {ArrayLike<Segment>} segments A valid sequence of QRCode segments
  * @param {number} size == 8 * (maximum codewords) for a specific QRCode'
- * @returns {ArrayLike<number>} padding (unchanged) for convenience
+ * @returns {ArrayLike} padding (unchanged) for convenience
  * @throws {QRCodePaddingError} If the padding is invalid. Does *not* enforce strict QR Code spec. rules for padding.
  */
 export function validatePadding(padding, segments, size) {
@@ -198,11 +198,11 @@ export function validatePadding(padding, segments, size) {
 	if (padding.length !== size)
 		throw new QRCodePaddingError(`Padding is the wrong size (${size}): ${padding.length}`);
 
-	for (let i = 0; i < padding.length; i++) {
-		let p = padding[i];  // 1 bit of padding
-		if (p !== 0 && p !== 1)
-			throw new QRCodePaddingError(`All elements in padding must be 0 or 1: ${p}`);
-	}
+	// for (let i = 0; i < padding.length; i++) {
+	// 	let p = padding[i];  // 1 bit of padding
+	// 	if (p !== 0 && p !== 1)
+	// 		throw new QRCodePaddingError(`All elements in padding must be 0 or 1: ${p}`);
+	// }
 
 	return padding;
 }
@@ -271,7 +271,7 @@ export function eciDesignatorBits(eciDesignator) {
 /**
  * Inserts the given number in big-endian (MSB first) order into the given buffer.
  * @param {number} x An unsigned integer
- * @param {ArrayLike<number>} buffer An uncompressed bit stream
+ * @param {ArrayLike} buffer An uncompressed bit stream
  * @param {number} offset The posiion to insert the number
  * @param {number} bits The explicit size of the insertion in bits.
  * 	This is needed since some numbers may be 0-padded. (e.g. "3" in 4 bits is 0011)
@@ -285,8 +285,8 @@ function appendNumber(x, buffer, offset, bits) {
 
 /**
  * Inserts the given buffer (x) into the given output buffer (buffer).
- * @param {ArrayLike<number>} x An uncompressed bit stream to insert.
- * @param {ArrayLike<number>} buffer An uncompressed bit stream to be modified.
+ * @param {ArrayLike} x An uncompressed bit stream to insert.
+ * @param {ArrayLike} buffer An uncompressed bit stream to be modified.
  * @param {number} offset The position in buffer to insert.
  * @returns {number} The new offset/position in buffer where the append ended.
  */
@@ -323,16 +323,12 @@ export class Segment {
 		this.size = 4;  // override in subclasses -- size of cannonical bit stream
 	}
 
-	appendMode(buffer, offset = 0) {
-		appendNumber(this.mode, buffer, offset, 4);
-	}
-
 	// abstract:
 	/**
 	 * Convert this Segment into its cannonical bit stream (uncompressed).
-	 * @returns {ArrayLike<number>}
+	 * @returns {ArrayLike}
 	 */
-	bitStream() { throw new Error("Abstract method"); }
+	bitStream(buffer, offset = 0) { throw new Error("Abstract method"); }
 }
 
 export class DataSegment extends Segment {
@@ -350,31 +346,11 @@ export class DataSegment extends Segment {
 		this.size = 4 + characterCountBits(this.qrCode.version, this.mode) + this.data.length;
 	}
 
-	/**
-	 * @param {ArrayLike<number>} buffer 
-	 * @param {number} offset
-	 * @returns {number} The new offset/position in buffer where the append ended
-	 */
-	appendCharacterCount(buffer, offset = 4) {
-		return appendNumber(this.characterCount, buffer, offset, characterCountBits(this.qrCode.version, this.mode));
-	}
-
-	/**
-	 * @param {ArrayLike<number>} buffer 
-	 * @param {number} offset
-	 * @returns {number} The new offset/position in buffer where the append ended
-	 */
-	appendData(buffer, offset) {
-		return appendBuffer(this.data, buffer, offset);
-	}
-
 	/** @override */
-	bitStream() {
-		let buffer = new Uint8Array(this.size);
-		let pos = 0;
-		pos = this.appendMode(buffer, pos);
-		pos = this.appendCharacterCount(buffer, pos);
-		pos = this.appendData(buffer, pos);
+	bitStream(buffer = new Array(this.size), offset = 0) {
+		offset = appendNumber(this.mode, buffer, offset, 4);
+		offset = appendNumber(this.characterCount, buffer, offset, characterCountBits(this.qrCode.version, this.mode));
+		offset = appendBuffer(this.data, buffer, offset);
 		return buffer;
 	}
 }
@@ -390,21 +366,10 @@ export class ECISegment extends Segment {
 		this.size = 4 + eciDesignatorBits(eciDesignator);
 	}
 
-	/**
-	 * @param {ArrayLike<number>} buffer 
-	 * @param {number} offset 
-	 * @returns The new offset/position in buffer where the append ended
-	 */
-	appendECIDesignator(buffer, offset = 4) {
-		return appendNumber(this.eciDesignator, buffer, offset, eciDesignatorBits(this.eciDesignator));
-	}
-
 	/** @override */
-	bitStream() {
-		let buffer = new Uint8Array(this.size);
-		let pos = 0;
-		pos = this.appendMode(buffer, pos);
-		pos = this.appendECIDesignator(buffer, pos);
+	bitStream(buffer = new Uint8Array(this.size), offset = 0) {
+		offset = appendNumber(this.mode, buffer, offset, 4);
+		offset = appendNumber(this.eciDesignator, buffer, offset, eciDesignatorBits(this.eciDesignator));
 		return buffer;
 	}
 }
@@ -419,22 +384,52 @@ export class NullSegment extends Segment {
 	}
 
 	/** @override */
-	bitStream() {
-		// The null terminator (end of message) segment's mode indicator is all 0's
-		// which is the default for Uint8Array
-		return new Uint8Array(this.size);
+	bitStream(buffer, offset) {
+		if (!buffer) {
+			// (optimization) The null terminator (end of message) segment's mode indicator is all 0's
+			// which is the default for Uint8Array
+			return new Uint8Array(this.size);
+		}
+		appendNumber(0x0, buffer, offset, this.size);
+		return buffer;
 	}
 }
 
 export class QRCode {
 	// Error correction levels (see QR code spec., ISO 18004)
-	L = "L";  // low (7%)
-	M = "M";  // medium (15%)
-	Q = "Q";  // quartile (25%)
-	H = "H";  // high (30%)
+	static L = "L";  // low (7%)
+	static M = "M";  // medium (15%)
+	static Q = "Q";  // quartile (25%)
+	static H = "H";  // high (30%)
+
+	/** @see Table 9 in ISO/IEC 18004:2000 */
+	static _EC_CHRACTERISTICS = [
+		null,  // no version 0
+		// scheme: [k, E, g_1, k_1, (g_2), (k_2)]
+		// L:                       M:                         Q:                         H:
+		[[ 19,  7, 1,  19, 0,  0],   [ 16, 10, 1, 16, 0,  0],   [ 13, 13, 1, 13, 0,  0],   [  9, 17, 1,  9, 0,  0]],  // version 1
+		[[ 34, 10, 1,  34, 0,  0],   [ 28, 16, 1, 28, 0,  0],   [ 22, 22, 1, 22, 0,  0],   [ 16, 28, 1, 16, 0,  0]],
+		[[ 55, 15, 1,  55, 0,  0],   [ 44, 26, 1, 44, 0,  0],   [ 34, 18, 2, 17, 0,  0],   [ 26, 22, 2, 13, 0,  0]],
+		[[ 80, 20, 1,  80, 0,  0],   [ 64, 18, 2, 32, 0,  0],   [ 48, 26, 2, 24, 0,  0],   [ 36, 16, 4,  9, 0,  0]],
+		[[108, 26, 1, 108, 0,  0],   [ 86, 24, 2, 43, 0,  0],   [ 62, 18, 2, 15, 2, 16],   [ 46, 22, 2, 11, 2, 12]],  // version 5
+		[[136, 18, 2,  68, 0,  0],   [108, 16, 4, 27, 0,  0],   [ 76, 24, 4, 19, 0,  0],   [ 60, 28, 4, 15, 0,  0]],
+		[[156, 20, 2,  78, 0,  0],   [124, 18, 4, 31, 0,  0],   [ 88, 18, 2, 14, 4, 15],   [ 66, 26, 4, 13, 1, 14]],
+		[[194, 24, 2,  97, 0,  0],   [154, 22, 2, 38, 2, 39],   [110, 22, 4, 18, 2, 19],   [ 86, 26, 4, 14, 2, 15]],
+		[[232, 30, 2, 116, 0,  0],   [182, 22, 3, 36, 2, 37],   [132, 20, 4, 16, 4, 17],   [100, 24, 4, 12, 4, 13]],  // version 9
+		[[274, 18, 2,  68, 2, 69],   [216, 26, 4, 43, 1, 44],   [154, 24, 6, 19, 2, 20],   [122, 28, 6, 15, 2, 16]],
+		[[324, 20, 4,  81, 0,  0],   [254, 30, 1, 50, 4, 81],   [180, 28, 4, 22, 4, 23],   [140, 24, 3, 12, 8, 13]],
+		// TODO: versions 12 to 40
+	];
+	static _EC_IDX = { "L": 0, "M": 1, "Q": 2, "H": 3 };
+	static _K  = 0;
+	static _E  = 1;
+	static _G1 = 2;
+	static _K1 = 3;
+	static _G2 = 4;
+	static _K2 = 5;
 
 	/**
-	 * @param {number} QRCode version (i.e. grid size)
+	 * @param {number} version QRCode version (i.e. grid size)
 	 * @param {str} ecLevel Error correction level: L, M, Q, or H
 	 * @param {ArrayLike<Segment>} segments The segment(s) in this QRCode.
 	 *	A 4-bit NullSegment is required at the end if there is padding.
@@ -445,10 +440,34 @@ export class QRCode {
 	constructor(version, ecLevel, segments, padding = null) {
 		this.version = validateVersion(version);
 		this.ecLevel = validateECLevel(ecLevel);
-		this.size = 8 * 13;  // TODO: stub -- must be a multiple of 8
+		this._ecCharacteristics = QRCode._EC_CHRACTERISTICS[this.version][QRCode._EC_IDX[this.ecLevel]];
 		this.segments = validateSegments(segments, this.size);
 		this.padding = padding !== null ? validatePadding(padding) : this.standardPadding();
 	}
+
+	/** Size in bytes (pre- error correction). */
+	get codewords() {  return this._ecCharacteristics[QRCode._K]; }
+
+	/** Error correction bytes per block. */
+	get E() { return this._ecCharacteristics[QRCode._E]; }
+
+	/** Number of blocks in group 1. */
+	get g1() { return this._ecCharacteristics[QRCode._G1]; }
+
+	/** Number of codewords (i.e. bytes) per block in group 1. */
+	get k1() { return this._ecCharacteristics[QRCode._K1]; }
+
+	/** Number of blocks in group 2. (May be 0.) */
+	get g2() { return this._ecCharacteristics[QRCode._G2]; }
+
+	/** Number of codewords (i.e. bytes) per block in gorup 2. (0 iff this.g2 === 0) */
+	get k2() { return this._ecCharacteristics[QRCode._K2];  } 
+
+	/** Size in bits (pre- error correction). */
+	get size() { return this.codewords * 8; }
+
+	/** Error correction bits needed for full message. */
+	get ecBits() { return this.E * (this.g1 + this.g2); }
 
 	/**
 	 * Generates the standard padding per QR Code spec., ISO 18004.
@@ -478,13 +497,15 @@ export class QRCode {
 
 	/**
 	 * Convert this QRCode into its cannonical bit stream (uncompressed).
-	 * @returns {ArrayLike<number>}
+	 * @returns {ArrayLike}
 	 */
-	bitStream() {
-		let buffer = new Uint8Array(this.size);
+	bitStream(buffer = new Array(this.size), offset = 0) {
 		let pos = 0;
-		for (let i = 0; i < this.segments.length; i++)
-			pos = appendBuffer(this.segments[i].bitStream(), buffer, pos);
+		for (let i = 0; i < this.segments.length; i++) {
+			let s = this.segments[i];
+			s.bitStream(buffer, pos);
+			pos += s.size;
+		}
 		pos = appendBuffer(this.padding, buffer, pos);
 		return buffer;
 	}
