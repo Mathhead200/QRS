@@ -25,6 +25,31 @@ form#info label > * {
 	vertical-align: top;
 }
 
+#partitions {
+	display: flex;
+	flex-direction: row;
+	justify-content: flex-start;
+	height: 16px;
+	width: 320px;
+	border: 1px solid black;
+	border-radius: 0.25em;
+	background-color: silver;
+}
+#partitions > * {
+	height: 16px;
+	font: 12px monospace;
+	text-align: center;
+	overflow: hidden;
+}
+/* https://www.etsy.com/listing/4507981599/sweet-pink-color-palette-for-playful */
+#partitions #header-bits    { background-color: #FF9923; }
+#partitions #data-bits      { background-color: #FFEF44; }
+#partitions #suffix-bits    { background-color: #AAFF32; }
+#partitions #null-bits      { background-color: #32BBFF; }
+#partitions #padding-bits   { background-color: #CC44FF; } 
+#partitions #ec-bits        { background-color: #FF55AB; }
+#partitions #remainder-bits { background-color: #F5EEFE; }
+
 svg#qrcode {
 	width: calc(min(95vw, 100vh));
 	height: calc(min(95vw, 100vh));

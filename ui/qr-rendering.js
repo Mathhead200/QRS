@@ -39,6 +39,8 @@ function buildQR(shape = "rect", scale = 100) {
 			rect.append(title);
 			svg.append(rect);
 			modules[i][j] = rect;
+
+			// TODO: add drawing events to svg module elements, e.g. <rect>.onclick
 		}
 	}
 }

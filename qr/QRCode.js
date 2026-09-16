@@ -219,26 +219,26 @@ export function validatePadding(padding, segments, size) {
 export function characterCountBits(version, mode) {
 	if (version <= 9)
 		switch (mode) {
-			case QRCode.NUMERIC:       return 10;
-			case QRCode.ALPHANUMERIC:  return 9;
-			case QRCode.BYTE:          return 8;
-			case QRCode.KANJI:         return 8;
+			case Segment.NUMERIC:       return 10;
+			case Segment.ALPHANUMERIC:  return 9;
+			case Segment.BYTE:          return 8;
+			case Segment.KANJI:         return 8;
 		}
 	else if (version <= 26)
 		switch (mode) {
-			case QRCode.NUMERIC:       return 12;
-			case QRCode.ALPHANUMERIC:  return 11;
-			case QRCode.BYTE:          return 16;
-			case QRCode.KANJI:         return 10;
+			case Segment.NUMERIC:       return 12;
+			case Segment.ALPHANUMERIC:  return 11;
+			case Segment.BYTE:          return 16;
+			case Segment.KANJI:         return 10;
 		}
 	else
 		switch (mode) {
-			case QRCode.NUMERIC:       return 14;
-			case QRCode.ALPHANUMERIC:  return 13;
-			case QRCode.BYTE:          return 16;
-			case QRCode.KANJI:         return 12;
+			case Segment.NUMERIC:       return 14;
+			case Segment.ALPHANUMERIC:  return 13;
+			case Segment.BYTE:          return 16;
+			case Segment.KANJI:         return 12;
 		}
-	throw QRCodeError(`Couldn't determine characterCountBits for verion ${version}, mode ${QRCode._modeToString(mode)}`);
+	throw new QRCodeError(`Couldn't determine characterCountBits for verion ${version}, mode ${mode}`);
 }
 
 /**
