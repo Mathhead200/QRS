@@ -1,5 +1,6 @@
+import { validateVersion } from "./QRCode.js";
 
-class Module {
+export class Module {
 	// pre-defined tags
 	static FINDER_PATTERN = "Finder Pattern";
 	static SEPERATOR = "Seperator";
@@ -21,7 +22,7 @@ class Module {
 	}
 }
 
-class RenderedQRCode {
+export class RenderedQRCode {
 	static _ALIGNMENT_PATTERNS = [
 		[],                             [6, 18],                        [6, 22],                        [6, 26],      // versions 1-4
 		[6, 30],                        [6, 34],                        [6, 22, 38],                    [6, 24, 42],  // versions 5-8
@@ -35,7 +36,31 @@ class RenderedQRCode {
 		[6, 28, 54, 80, 106, 132, 158], [6, 32, 58, 84, 110, 136, 162], [6, 26, 54, 82, 110, 138, 166], [6, 30, 58, 86, 114, 142, 170],  // version 37-40
 	];
 
+	/**
+	 * QR code version
+	 * @type {number}
+	 */
+	version;
+
+	/**
+	 * Rows and columns of (square) QR code
+	 * @type {number}
+	 */
+	size;
+
+	/**
+	 * @type {Array<Array<Module>>}
+	 */
+	modules;
+
+	/**
+	 * Number of modules that can store data
+	 * @type {number}
+	 */
+	dataBits;
+
 	constructor(version) {
+		this.version = validateVersion(version);
 		this.size = 21 + 4 * (version - 1);
 		this.modules = new Array(this.size);
 		for (let i = 0; i < this.size; i++)
@@ -149,6 +174,30 @@ class RenderedQRCode {
 				}
 				col -= 2;
 			}
+
+			this.dataBits = index;  // store total number of modules that have data
 		}
+
+		// Assert: for all i,j, this.modules[i][j] should be non-null and type Module
+	}
+
+	forEach(callback) {
+		for (let i = 0; i < this.size; i++)
+			for (let j = 0; j < this.size; j++)
+				callback(this.modules[i][j], i, j);
+	}
+
+	*[Symbol.iterator]() {
+		for (let i = 0; i < this.size; i++)
+			for (let j = 0; j < this.size; j++)
+				yield this.modules[i][j];
+	}
+
+	/** Get mask 0 as an affine transformation vector. */
+	mask0() {
+		const dataModules = new Array(this.dataBits);
+		this.forEach((m, i, j) => {
+			dataModules[m.index] = Number((i + j) % 2 === 0);
+		});
 	}
 }
