@@ -50,7 +50,7 @@ export function* nIndex(dims) {
 /**
  * @param {*} T Underlying data type, e.g. Uint32Array 
  * @param {Array<number>} dims Dimensions, e.g. [10, 4, 2] would make an array of 10 4-by-2 matricies.
- * @returns {Array} An n-dimensional array (with n === dims.length) where each element points to a subarray of one contiguous T array.
+ * @returns {Array | T} An n-dimensional array (with n === dims.length) where each element points to a subarray of one contiguous T array.
  */
 export function contiguousTensor(T, dims) {
 	let n = 1;
