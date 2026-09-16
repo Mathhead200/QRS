@@ -1,4 +1,13 @@
-import { validateVersion } from "./QRCode.js";
+import { validateECLevel, validateVersion } from "./QRCode.js";
+import { QRCodeError } from "./QRCode.js";
+
+export class QRCodeMaskError extends QRCodeError {}
+
+export function validateMask(mask) {
+	if (!Number.isInteger(mask) || mask < 0 || mask > 7)
+		throw new QRCodeMaskError(`Invalid mask (expected 0-7): ${mask}`);
+	return mask;
+}
 
 export class Module {
 	// pre-defined tags
@@ -48,21 +57,24 @@ export class RenderedQRCode {
 		(i, j) => ((i + j) % 2 + (i * j) % 3) % 2 === 0
 	];
 
+	// Precomputed:
 	// https://www.thonky.com/qr-code-tutorial/format-version-information
 	// https://www.thonky.com/qr-code-tutorial/format-version-tables
 	static _FORMATS = {
+		     // Masks 0-7 for each ecLevel
 		"L": [0x77C4, 0x72F3, 0x7DAA, 0x789D, 0x662F, 0x6318, 0x6C41, 0x6976],
 		"M": [0x5412, 0x5125, 0x5E7C, 0x5B4B, 0x45F9, 0x40CE, 0x4F97, 0x4AA0],
 		"Q": [0x355F, 0x3068, 0x3F31, 0x3A06, 0x24B4, 0x2183, 0x2EDA, 0x2BED],
 		"H": [0x1689, 0x13BE, 0x1CE7, 0x19D0, 0x0762, 0x0255, 0x0D0C, 0x083B]
 	};
 
+	// Precomputed:
 	// https://www.thonky.com/qr-code-tutorial/format-version-tables
 	static _VERSIONS = [
-		// Starts at version 7
-		0b000111110010010100,
-		0b001000010110111100,
-		// TODO: ...
+		/* Starts at version 7 ........................... */ 0x07C94, 0x085BC, 0x09A99, 0x0A4D3,  // versions 7-10
+		0x0BBF6, 0x0C762, 0x0D847, 0x0E60D, 0x0F928, 0x10B78, 0x1145D, 0x12A17, 0x13532, 0x149A6,  // versions 11-20
+		0x15683, 0x168C9, 0x177EC, 0x18EC4, 0x191E1, 0x1AFAB, 0x1B08E, 0x1CC1A, 0x1D33F, 0x1ED75,  // versions 21-30
+		0x1F250, 0x209D5, 0x216F0, 0x228BA, 0x2379F, 0x24B0B, 0x2542E, 0x26A64, 0x27541, 0x28C69   // versions 31-40
 	];
 
 	/**
@@ -143,7 +155,9 @@ export class RenderedQRCode {
 						continue;
 
 					// place pattern
-					this.modules[row + i][col + j] = new Module(PATTERN[i][j], Module.ALIGNMENT_PATTERN);
+					for (let i = 0; i < 5; i++)
+						for (let j = 0; j < 5; j++)
+							this.modules[row + i][col + j] = new Module(PATTERN[i][j], Module.ALIGNMENT_PATTERN);
 				}
 		}
 
@@ -180,10 +194,10 @@ export class RenderedQRCode {
 		if (version >= 7) {
 			for (let i = 0; i < 6; i++)
 				for (let j = 0; j < 3; j++)
-					this.modules[i][this.size - 11 + j] = new Module(null, Module.VERSION_INFO);  // top-right
+					this.modules[i][this.size - 11 + j] = new Module(null, Module.VERSION_INFO, j + 3 * i);  // top-right
 			for (let i = 0; i < 3; i++)
 				for (let j = 0; j < 6; j++)
-					this.modules[this.size - 11 - i][j] = new Module(null, Module.VERSION_INFO);  // bottom-left
+					this.modules[this.size - 11 + i][j] = new Module(null, Module.VERSION_INFO, i + 3 * j);  // bottom-left
 		}
 
 		// 7. Place data bit in serpentine pattern
@@ -232,8 +246,8 @@ export class RenderedQRCode {
 	 * @returns {ArrayLike<number>} uncompressed bit stream as (flattened) column vector
 	 */
 	mask(n) {
+		const mask = RenderedQRCode._MASKS[validateMask(n)];  // predicate
 		const vec = new Uint8Array(this.dataBits);
-		const mask = RenderedQRCode._MASKS[n];  // predicate
 		this.forEach((m, i, j) => {
 			if (m.tag === Module.DATA)
 				vec[m.index] = Number(mask(i, j));
@@ -241,13 +255,28 @@ export class RenderedQRCode {
 		return vec;
 	}
 
+	/**
+	 * Sets the reserved FORMAT_INFO and VERSION_INFO modules.
+	 * @param {string} ecLevel "L", "M", "Q", or "H"
+	 * @param {number} mask 0-7
+	 */
 	setFormat(ecLevel, mask) {
-		let bits = RenderedQRCode._FORMATS[ecLevel][mask];
-		// TODO: ... set format (reserved) bits ...
+		validateECLevel(ecLevel);
+		validateMask(mask);
+		
+		let bits = RenderedQRCode._FORMATS[ecLevel][mask];  // 15 bits
+		for (let m of this)
+			if (m.tag === Module.FORMAT_INFO)
+				m.color = (bits >> (14 - m.index)) & 0x01;
 
 		if (this.version >= 7) {
-			bits = RenderedQRCode._VERSIONS[this.version - 7];
-			// TODO: ... set version (reserved) bits ...
+			bits = RenderedQRCode._VERSIONS[this.version - 7];  // 18 bits
+			for (let m of this)
+				if (m.tag === Module.VERSION_INFO)
+					m.color = (bits >> (17 - m.index)) & 0x001;
 		}
 	}
 }
+
+// TODO: Penalty Score
+// TODO: Quiet Zone

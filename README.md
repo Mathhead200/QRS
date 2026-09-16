@@ -7,8 +7,7 @@
 6. (Ignoring) FNC1 mode
 
 *Other parameters:
-6. Non-standard padding
-7. Non-standard null-terminator
+7. Non-standard padding
 8. (Ignore) Add UTF byte order mark (BOM), 0xEF 0xBB 0xBF
 
 *Algorithm for QR code generation:

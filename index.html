@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title> QRS: QRCode Solver </title>
+	<link rel="stylesheet" href="style.css">
+	<script src="ui/persistent-form.js" type="module" defer></script>  <!-- Should come before QR render so info can be loaded. -->
+	<script src="ui/qr-rendering.js" type="module" defer></script>
+</head>
+<body>
+	<main>
+		<form id="info">
+			<label> Version: <input id="version" type="number" min="1" max="40" value="1"> </label>
+			<label> Error Correction Level: <select id="ecLevel">
+				<option value="L"> Low </option>
+				<option value="M" selected> Medium </option>
+				<option value="Q"> Quartile </option>
+				<option value="H"> High </option>
+			</select> </label>
+			<label> Mask: <input id="mask" type="number" min="0" max="7" value="0"> </label>
+			<label> Mode: <select id="mode">
+				<option value="1"> Numeric </option>
+				<option value="2"> Alphanumeric </option>
+				<option value="4" selected> Byte </option>
+				<option value="8"> Kanji </option>
+			</select> </label>
+			<label> Data: <textarea id="data" type="text" placeholder="example.com?"></textarea> </label>
+			<label> Suffix Length: <input id="suffix" type="number" min="0" value="0"> </label>
+			<label> Hack Padding: <input id="padding" type="checkbox"> </label>
+			<div id="partitions">
+				<div id="header-bits"></div>    <!-- Segment Header: mode, and character count   -->
+				<div id="data-bits"></div>      <!-- (Fixed) Data                                -->
+				<div id="suffix-bits"></div>    <!-- (Free) Data                                 -->
+				<div id="null-bits"></div>      <!-- Null Terminator/Segment                     -->
+				<div id="padding-bits"></div>   <!-- Padding before error correction             -->
+				<div id="ec-bits"></div>        <!-- Bits added by error correction              -->
+				<div id="remainder-bits"></div> <!-- Remainder bits added after error correction -->
+			</div>
+			<div>
+				<input type="submit" value="Solve">
+				<input type="reset" value="Defaults">
+			</div>
+		</form>
+		<svg id="qrcode" viewBox="0 0 2100 2100" xmlns="http://www.w3.org/2000/svg"></svg>
+	</main>
+</body>
+</html>

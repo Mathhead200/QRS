@@ -29,7 +29,7 @@ export class QRCodePaddingError extends QRCodeError {}
  */
 export function validateVersion(version) {
 	if (!Number.isInteger(version) || version < 1 || version > 40)
-		throw QRCodeVersionError(`Invalid verion: ${version}`);
+		throw new QRCodeVersionError(`Invalid verion: ${version}`);
 	return version;
 }
 
