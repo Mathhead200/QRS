@@ -12,8 +12,8 @@ export class Module {
 	static DATA = "Data";  // codewords, error correction, and remainder bits
 
 	// colors
-	static BLACK = "black";
-	static WHITE = "white";
+	static WHITE = 0;
+	static BLACK = 1;
 
 	constructor(color, tag, index = null) {
 		this.color = color;
@@ -34,6 +34,35 @@ export class RenderedQRCode {
 		[6, 30, 54, 78, 102, 126],      [6, 26, 52, 78, 104, 130],      [6, 30, 56, 82, 108, 134],      [6, 34, 60, 86, 112, 138],  // versions 29-32
 		[6, 30, 58, 86, 114, 142],      [6, 34, 62, 90, 118, 146],      [6, 30, 54, 78, 102, 126, 150], [6, 24, 50, 76, 102, 128, 154],  // version 33-36
 		[6, 28, 54, 80, 106, 132, 158], [6, 32, 58, 84, 110, 136, 162], [6, 26, 54, 82, 110, 138, 166], [6, 30, 58, 86, 114, 142, 170],  // version 37-40
+	];
+
+	// https://www.thonky.com/qr-code-tutorial/mask-patterns
+	static _MASKS = [
+		(i, j) => (i + j) % 2 === 0,
+		(i, j) => i % 2 === 0,
+		(i, j) => j % 3 === 0,
+		(i, j) => (i + j) % 3 === 0,
+		(i, j) => (Math.floor(i / 2) + Math.floor(j / 3)) % 2 === 0,
+		(i, j) => (i * j) % 2 + (i * j) % 3 === 0,
+		(i, j) => ((i * j) % 2 + (i * j) % 3) % 2 === 0,
+		(i, j) => ((i + j) % 2 + (i * j) % 3) % 2 === 0
+	];
+
+	// https://www.thonky.com/qr-code-tutorial/format-version-information
+	// https://www.thonky.com/qr-code-tutorial/format-version-tables
+	static _FORMATS = {
+		"L": [0x77C4, 0x72F3, 0x7DAA, 0x789D, 0x662F, 0x6318, 0x6C41, 0x6976],
+		"M": [0x5412, 0x5125, 0x5E7C, 0x5B4B, 0x45F9, 0x40CE, 0x4F97, 0x4AA0],
+		"Q": [0x355F, 0x3068, 0x3F31, 0x3A06, 0x24B4, 0x2183, 0x2EDA, 0x2BED],
+		"H": [0x1689, 0x13BE, 0x1CE7, 0x19D0, 0x0762, 0x0255, 0x0D0C, 0x083B]
+	};
+
+	// https://www.thonky.com/qr-code-tutorial/format-version-tables
+	static _VERSIONS = [
+		// Starts at version 7
+		0b000111110010010100,
+		0b001000010110111100,
+		// TODO: ...
 	];
 
 	/**
@@ -132,16 +161,20 @@ export class RenderedQRCode {
 		this.modules[this.size - 8][8] = new Module(B, Module.DARK_MODULE);
 
 		// 5. reserve: format info area
-		for (let j = 0; j < 9; j++)
-			if (j != 6)  // timing pattern
-				this.modules[8][j] = new Module(null, Module.FORMAT_INFO);  // horizontal, left side
-		for (let j = this.size - 8; j  < this.size; j++)
-			this.modules[8][j] = new Module(null, Module.FORMAT_INFO);  // horizontal, right side
-		for (let i = 0; i < 8; i++)
-			if (i != 6)  // timing pattern
-				this.modules[i][8] = new Module(null, Module.FORMAT_INFO);  // vertical, upper
-		for (let i = this.size - 7; i < this.size; i++)
-			this.modules[i][8] = new Module(null, Module.FORMAT_INFO);  // vertical, lower
+		{	let index = 0;
+			for (let j = 0; j < 8; j++)
+				if (j != 6)  // timing pattern
+					this.modules[8][j] = new Module(null, Module.FORMAT_INFO, index++);  // horizontal, left side
+			for (let j = this.size - 8; j  < this.size; j++)
+				this.modules[8][j] = new Module(null, Module.FORMAT_INFO, index++);  // horizontal, right side
+
+			index = 14;
+			for (let i = 0; i < 9; i++)
+				if (i != 6)  // timing pattern
+					this.modules[i][8] = new Module(null, Module.FORMAT_INFO, index--);  // vertical, upper
+			for (let i = this.size - 7; i < this.size; i++)
+				this.modules[i][8] = new Module(null, Module.FORMAT_INFO, index--);  // vertical, lower
+		}
 
 		// 6. reserve: version info area
 		if (version >= 7) {
@@ -193,11 +226,28 @@ export class RenderedQRCode {
 				yield this.modules[i][j];
 	}
 
-	/** Get mask 0 as an affine transformation vector. */
-	mask0() {
-		const dataModules = new Array(this.dataBits);
+	/**
+	 * Get mask n as an affine transformation vector.
+	 * @param {number} n (uint3) between 0 and 7 (inclusive)
+	 * @returns {ArrayLike<number>} uncompressed bit stream as (flattened) column vector
+	 */
+	mask(n) {
+		const vec = new Uint8Array(this.dataBits);
+		const mask = RenderedQRCode._MASKS[n];  // predicate
 		this.forEach((m, i, j) => {
-			dataModules[m.index] = Number((i + j) % 2 === 0);
+			if (m.tag === Module.DATA)
+				vec[m.index] = Number(mask(i, j));
 		});
+		return vec;
+	}
+
+	setFormat(ecLevel, mask) {
+		let bits = RenderedQRCode._FORMATS[ecLevel][mask];
+		// TODO: ... set format (reserved) bits ...
+
+		if (this.version >= 7) {
+			bits = RenderedQRCode._VERSIONS[this.version - 7];
+			// TODO: ... set version (reserved) bits ...
+		}
 	}
 }
