@@ -1,7 +1,8 @@
 
 import { Module, RenderedQRCode } from "../qr/RenderedQRCode.js"
-import { DataSegment, Segment } from "../qr/QRCode.js";
+import { DataSegment, NullSegment, QRCode, Segment, appendBuffer } from "../qr/QRCode.js";
 import { EncodeData } from "../qr/EncodeData.js"
+import { DataSize } from "../qr/DataSize.js";
 
 const UTF8 = new TextEncoder();
 
@@ -52,44 +53,86 @@ function buildQR(shape = "rect", scale = 100) {
 function updateQR() {
 	const version = +fields.version.value;
 	const ecLevel = fields.ecLevel.value;
-	const mask = +fields.mask.value;
+	const mask = fields.mask.valueAsNumber;  // NaN if empty ""
 	const mode = +fields.mode.value;
 	const data = fields.data.value;
+	const suffix = +fields.suffix.value;
+	const padding = fields.padding.checked;
 
 	// color format and version modules
-	qr.setFormat(ecLevel, mask);
+	const RESERVED = -1;  // a special reserved "color"
+	if (!Number.isNaN(mask)) {
+		qr.setFormat(ecLevel, mask);
+	} else {
+		for (let m of qr)
+			if (m.tag === Module.FORMAT_INFO || m.tag === Module.VERSION_INFO)
+				m.color = RESERVED;
+	}
 	
-	// encode data so we can color data modules
-	let bits = [];  // encoded bit stream
+	// encode data and build QRCode so we can color data modules
+	let bits = [];  // bit stream
 	fields.data.classList.remove("error");
 	try {
+		// encode data, and determine suffix size
+		let suffixBits;
 		switch (mode) {
 			case Segment.NUMERIC:
-				if (data.length % 2 === 0)
-					bits = EncodeData.numeric(data);
+				if (data.length % 3 !== 0)
+					throw new Error("NUMERIC encoding only linear in blocks of 3 digits.");
+				bits = EncodeData.numeric(data); 
+				suffixBits = DataSize.numeric(suffix);
 				break;
 		
 			case Segment.ALPHANUMERIC:
-				if (data.length % 3 === 0)
-					bits = EncodeData.alphanumeric(data);
+				if (data.length % 2 !== 0)
+					throw new Error("ALPHANUMERIC encodinng only linear in blocks of 2 characters.")
+				bits = EncodeData.alphanumeric(data);
+				suffixBits = DataSize.alphanumeric(suffix);
 				break;
 		
 			case Segment.BYTE:
 				bits = EncodeData.bytes(UTF8.encode(data));
+				suffixBits = DataSize.bytes(suffix);
 				break;
 		
 			case Segment.KANJI:
 				break;  // TODO: Kanji not implemented!
 		}
+
+		// add suffix as "null" bits
+		{	const buf = new Array(bits.length + suffixBits).fill(null);  // suffix bits are null
+			appendBuffer(bits, buf, 0);
+			bits = buf;
+		}
+
+		// add segment header
+		let s = new DataSegment(version, mode, data.length + suffix, bits);
+		bits = s.bitStream();
+
+		// add NullSegment
+		let eom;  // End of Message: NullSegment
+		let qrSize;
+		{	const { codewords } = QRCode.ecCharacteristics({ version, ecLevel });
+			qrSize = 8 * codewords;  // ignoring error codewords
+			eom = new NullSegment(Math.min(qrSize - s.size, 4));
+			
+			const buf = new Array(s.size + eom.size);
+			let offset = appendBuffer(bits, buf, 0);
+			appendBuffer(eom.bitStream(), buf, offset);
+			bits = buf;
+		}
+
+		// use non-stansard padding (i.e. null bits), or standard padding
+		const p = (padding) ? new Array(qrSize - s.size - eom.size).fill(null) : null;
+
+		// build QRCode
+		bits = new QRCode(version, ecLevel, [s, eom], p).bitStream();
+
 	} catch (ex) {
 		fields.data.classList.add("error");
-		console.error(ex);
+		console.error(ex);  // DEBUG
 	}
-	bits = new DataSegment(version, mode, data.length, bits).bitStream(); // add segment header
-	let maskAt = RenderedQRCode._MASKS[+fields.mask.value];  // predicate
-
-	// TODO: account for suffix in segment rendering
-	// TODO: add null segment in render
+	let maskAt = !Number.isNaN(mask) ? RenderedQRCode._MASKS[mask] : (i, j) => false;  // predicate
 
 	for (let i = 0; i < qr.size; i++) {
 		for (let j = 0; j < qr.size; j++) {
@@ -99,7 +142,7 @@ function updateQR() {
 			if (m.tag === Module.DATA) {
 				if (m.index < bits.length) {
 					m.color = bits[m.index];
-					if (maskAt(i, j))
+					if (m.color != null && maskAt(i, j))
 						m.color = 1 - m.color;
 				} else {
 					m.color = null;
@@ -107,10 +150,11 @@ function updateQR() {
 			}
 
 			let rect = modules[i][j];
-			rect.classList.remove("white", "black", "empty");
+			rect.classList.remove("white", "black", "reserved", "empty");
 			let c =
 				m.color === Module.WHITE ? "white" :
 				m.color === Module.BLACK ? "black" :
+				m.color === RESERVED     ? "reserved" :
 				"empty";
 			rect.classList.add(c);
 		}
@@ -126,7 +170,9 @@ document.addEventListener("DOMContentLoaded", () => initializeQR());  // initial
 form.addEventListener("reset", () => initializeQR());                 // re-render full QR if form is reset
 fields.version.addEventListener("change", () => initializeQR());      // re-render full QR code if version changes
 fields.ecLevel.addEventListener("change", () => updateQR());
+fields.mask.addEventListener("change", () => updateQR());
 fields.mode.addEventListener("change", () => updateQR());
 fields.data.addEventListener("input", () => updateQR());
 fields.data.addEventListener("change", () => updateQR());
-fields.mask.addEventListener("change", () => updateQR());
+fields.suffix.addEventListener("change", () => updateQR());
+fields.padding.addEventListener("change", () => updateQR());

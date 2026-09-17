@@ -22,6 +22,8 @@ export class QRCodeECLevelError extends QRCodeError {}
 
 export class QRCodePaddingError extends QRCodeError {}
 
+export class SizeError extends QRCodeError {}
+
 /**
  * @param {*} version A potentially valid or invalid QRCode version (i.e. size).
  * @returns {number} version (unchanged) for convenience
@@ -121,7 +123,7 @@ export function validateECLevel(ecLevel) {
  * @throws {QRError} If the segments array is invalid, e.g. too long, missing expected NullTerminator
  */
 export function validateSegments(segments, version, size) {
-	if (Number.isInteger(segments?.length))
+	if (!Number.isInteger(segments?.length))
 		throw new QRCodeError(`Expected ArrayLike: ${segments}`);
 
 	let sum = 0;
@@ -141,7 +143,7 @@ export function validateSegments(segments, version, size) {
 		// validated: s.mode
 
 		// Validate DataSegments
-		if (s.data != undefined) {
+		if (s.data !== undefined) {
 			if (validateVersion(s.version) !== version)  // may throw QRCodeVersionError extends QRCodeError
 				throw new QRError(`Expected a segment for QR code version (${version}): ${s.version}`);
 			// validated: s.version
@@ -278,7 +280,7 @@ export function eciDesignatorBits(eciDesignator) {
  * 	This is needed since some numbers may be 0-padded. (e.g. "3" in 4 bits is 0011)
  * @returns {number} The new offset/position in buffer where the append ended.
  */
-function appendNumber(x, buffer, offset, bits) {
+export function appendNumber(x, buffer, offset, bits) {
 	while (bits > 0)
 		buffer[offset++] = (x >>> --bits) & 0x1;
 	return offset;
@@ -291,7 +293,7 @@ function appendNumber(x, buffer, offset, bits) {
  * @param {number} offset The position in buffer to insert.
  * @returns {number} The new offset/position in buffer where the append ended.
  */
-function appendBuffer(x, buffer, offset) {
+export function appendBuffer(x, buffer, offset) {
 	for (let i = 0; i < x.length; i++)
 		buffer[offset++] = x[i];
 	return offset;
@@ -305,7 +307,7 @@ function appendBuffer(x, buffer, offset) {
  * @param {number} col_offset
  * @returns {[number, number]} [row_offset, col_offset] The new offsets in the matrix where the append ended (in both dimension).
  */
-function appendMatrix(submat, matrix, row_offset = 0, col_offset = 0) {
+export function appendMatrix(submat, matrix, row_offset = 0, col_offset = 0) {
 	let longest_row = 0;
 	for (let i = 0; i < submat.length; i++) {
 		for (let j = 0; j < submat[i].length; j++)
@@ -399,6 +401,8 @@ export class NullSegment extends Segment {
 	 */
 	constructor(bits = 4) {
 		super(Segment.NULL);
+		if (!Number.isInteger(bits) || bits < 0 || bits > 4)
+			throw new SizeError(`NullSegment must have size 0-4 bits: ${bits}`);
 		this.size = bits;  // since the NullSegment may be truncated or missing if there is no padding.
 	}
 
@@ -522,8 +526,8 @@ export class QRCode {
 		this.version = validateVersion(version);
 		this.ecLevel = validateECLevel(ecLevel);
 		Object.assign(this, QRCode.ecCharacteristics({ version, ecLevel }));
-		this.segments = validateSegments(segments, this.size);
-		this.padding = padding !== null ? validatePadding(padding) : this.standardPadding();
+		this.segments = validateSegments(segments, version, this.size);
+		this.padding = padding !== null ? validatePadding(padding, segments, this.size) : this.standardPadding();
 	}
 
 	/** Size in bits (pre- error correction). */

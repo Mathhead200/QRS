@@ -44,7 +44,7 @@ function updatePartitionsView() {
 	const dataBits           = encodedSize(data.length);
 	const dataBitsWithSuffix = encodedSize(data.length + suffix);
 	const suffixBits = dataBitsWithSuffix - dataBits;
-	const paddingAndNullBits = codewordBits - dataBitsWithSuffix;
+	const paddingAndNullBits = codewordBits - headerBits - dataBitsWithSuffix;
 	const nullBits = Math.min(paddingAndNullBits, 4);
 	const paddingBits = paddingAndNullBits - nullBits;
 

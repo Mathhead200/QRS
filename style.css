@@ -62,6 +62,7 @@ svg#qrcode {
 
 svg#qrcode .white { fill: white; }
 svg#qrcode .black { fill: black; }
+svg#qrcode .reserved { fill: brown; }
 
 svg#qrcode .empty {
 	fill: #977D6C;  /* lightsalmon */
