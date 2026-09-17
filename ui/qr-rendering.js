@@ -128,6 +128,8 @@ function updateQR() {
 		// build QRCode
 		bits = new QRCode(version, ecLevel, [s, eom], p).bitStream();
 
+		// TODO: calculate and render error bits where full defined
+
 	} catch (ex) {
 		fields.data.classList.add("error");
 		console.error(ex);  // DEBUG
