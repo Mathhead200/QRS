@@ -25,6 +25,10 @@ form#info label > * {
 	vertical-align: top;
 }
 
+form#info .error {
+	outline: 1px solid red;
+}
+
 #partitions {
 	display: flex;
 	flex-direction: row;
@@ -60,7 +64,7 @@ svg#qrcode .white { fill: white; }
 svg#qrcode .black { fill: black; }
 
 svg#qrcode .empty {
-	fill: lightsalmon;
+	fill: #977D6C;  /* lightsalmon */
 	cursor: pointer;
 }
-svg#qrcode .empty.odd { fill: coral; }
+svg#qrcode .empty.odd { fill: #D3C9BB; }  /* coral */

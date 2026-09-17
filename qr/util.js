@@ -8,8 +8,8 @@
  */
 export function hex(n, digits=0) {
 	if (Number.isInteger(n) && n >= 0) {
-		str = n.toString(16);
-		str = "0".repeat(Math.max(digits - str.length(), 0)) + str
+		let str = n.toString(16);
+		str = "0".repeat(Math.max(digits - str.length, 0)) + str
 		return "0x" + str;
 	}
 	return mode.toString();

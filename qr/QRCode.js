@@ -54,9 +54,9 @@ export function validateMode(mode) {
 export function validateCharacterCount(characterCount, version, mode) {
 	if (!Number.isInteger(characterCount) || characterCount < 0)
 		throw QRCodeError(`Invalid character count: ${characterCount}`);
-	let bits = QRCode.characterCountBits(version, mode);
-	if (characterCount < Math.pow(2, bits))
-		throw QRCodeError(`Character count is too large (${bits} bits) for version ${version}, mode ${hex(mode)}: ${characterCount}`);
+	let bits = characterCountBits(version, mode);
+	if (characterCount >= Math.pow(2, bits))
+		throw new QRCodeError(`Character count is too large (${bits} bits) for version ${version}, mode ${hex(mode)}: ${characterCount}`);
 	return characterCount
 }
 
@@ -362,13 +362,13 @@ export class DataSegment extends Segment {
 		this.version = validateVersion(version);
 		this.characterCount = validateCharacterCount(characterCount, version, mode);
 		this.data = validateData(data, mode, characterCount);
-		this.size = 4 + characterCountBits(this.qrCode.version, this.mode) + this.data.length;
+		this.size = 4 + characterCountBits(version, mode) + this.data.length;
 	}
 
 	/** @override */
 	bitStream(buffer = new Array(this.size), offset = 0) {
 		offset = appendNumber(this.mode, buffer, offset, 4);
-		offset = appendNumber(this.characterCount, buffer, offset, characterCountBits(this.qrCode.version, this.mode));
+		offset = appendNumber(this.characterCount, buffer, offset, characterCountBits(this.version, this.mode));
 		offset = appendBuffer(this.data, buffer, offset);
 		return buffer;
 	}
