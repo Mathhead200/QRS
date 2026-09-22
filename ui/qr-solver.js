@@ -69,9 +69,8 @@ svg.addEventListener("QRDraw", event => {
 
 form.addEventListener("submit", event => {
 	event.preventDefault();
-	console.log(T, x, y);  // TODO: stub
 
-	// GF2 Gauss-Jordan Elimination with REF
+	// GF2 Gauss-Jordan Elimination with RREF
 	PIVOT: for (let j = 0; j < x.length; j++) {  // pivot columns in T
 		// Find first row with pivot (1) in leading correct position, and row swap
 		let i = j;
@@ -80,15 +79,16 @@ form.addEventListener("submit", event => {
 			if (T[i][j] === 1)  break;  // Found pivot on row i!
 		}
 		if (i !== j)
-			for (let arr of [T, x, y])
+			for (let arr of [T, y])
 				[arr[i], arr[j]] = [arr[j], arr[i]];  // row swap, row_i <-> row_j
 		
-		// 0-out all elements below pivot
-		for (let i = j + 1; i < T.length; i++)
-			if (T[i][j] !== 0) {
+		// 0-out all elements above & below pivot
+		for (let i = 0; i < T.length; i++)
+			if (i !== j && T[i][j] !== 0) {
 				T[i] = GF2.vector_add(T[i], T[j]);  // row-(multiply)-add, row_i += row_j
-				x[i] = GF2.add(x[i], x[j]);
 				y[i] = GF2.add(y[i], y[j]);
 			}
 	}
+
+	console.log(T, x, y);  // TODO: stub
 });
