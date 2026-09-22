@@ -127,14 +127,14 @@ function updateQR() {
 		const p = (padding) ? new Array(qrSize - s.size - eom.size).fill(null) : null;
 
 		// build QRCode
-		let qr = new QRCode(version, ecLevel, [s, eom], p);
-		bits = qr.bitStream();
+		let qrc = new QRCode(version, ecLevel, [s, eom], p);
+		bits = qrc.bitStream();
 
 		// calculate and render error bits where full defined
-		bits = GF2.vector_mul(qr.ecMatrix(), bits);
+		bits = GF2.vector_mul(qrc.ecMatrix(), bits);
 
 		// add remainder bits
-		bits.push(...new Uint8Array(qr.remainderBits));
+		bits.push(...new Uint8Array(qrc.remainderBits));
 
 	} catch (ex) {
 		fields.data.classList.add("error");
@@ -167,6 +167,13 @@ function updateQR() {
 			rect.classList.add(c);
 		}
 	}
+
+	// dispatch custom event, "QRUpdate"
+	svg.dispatchEvent(new CustomEvent("QRUpdate", {
+		detail: { modules, qr, version, ecLevel, mask, mode, data, suffix, padding, bits },
+		bubbles: true,
+		cancelable: true
+	}));
 }
 
 function initializeQR(shape = "rect", scale = 100) {

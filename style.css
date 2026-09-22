@@ -20,11 +20,9 @@ form#info {
 	justify-content: center;
 	gap: 0.5em;
 }
-
 form#info label > * {
 	vertical-align: top;
 }
-
 form#info .error {
 	outline: 1px solid red;
 }
@@ -64,12 +62,11 @@ svg#qrcode rect {
 	fill: var(--fill);
 	stroke: var(--fill);
 }
-svg#qrcode .white { --fill: white; }
-svg#qrcode .black { --fill: black; }
-svg#qrcode .reserved { --fill: brown; }
-
 svg#qrcode .empty {
 	--fill: #977D6C;  /* lightsalmon */
 	cursor: pointer;
 }
 svg#qrcode .empty.odd { --fill: #D3C9BB; }  /* coral */
+svg#qrcode .white, svg#qrcode .white.odd { --fill: white; }
+svg#qrcode .black, svg#qrcode .black.odd { --fill: black; }
+svg#qrcode .reserved { --fill: brown; }

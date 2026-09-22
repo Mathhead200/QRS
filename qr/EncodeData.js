@@ -106,7 +106,7 @@ export class EncodeData {
 			let bits = g.length === 3 ? 10 : g.length === 2 ? 7 : 4;
 
 			// bits within each group are stored big-endian
-			n = Number(g);
+			let n = Number(g);
 			for (let shift = bits - 1; shift >= 0; shift--)
 				data[next++] = (n >>> shift) & 0x1;
 		}

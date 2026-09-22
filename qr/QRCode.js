@@ -616,20 +616,22 @@ export class QRCode {
 		let dest = 0;  // row index
 		
 		// data rows comes first
-		for (let offset = 0; offset < 8 * kMax; offset++) {
-			let i = 0;
-			if (offset < 8 * this.k1)  // add one data row from each block in group 1
-				for (; i < this.g1; i++)  // block index, i
-					permuted[dest++] = matrix[blocks[i].data + offset];
-			if (offset < 8 * this.k2)  // add one data row from each block in group 2
-				for (; i < g; i++)  // block index, i
-					permuted[dest++] = matrix[blocks[i].data + offset];
+		for (let offset = 0; offset < kMax; offset++) {
+			if (offset < this.k1)  // add 8 data rows (1 byte) from each block in group 1
+				for (let i = 0; i < this.g1; i++)  // block index, i
+					for (let n = 0; n < 8; n++)  // bit n
+						permuted[dest++] = matrix[blocks[i].data + 8 * offset + n];
+			if (offset < this.k2)  // add 8 data (1 byte) row from each block in group 2
+				for (let i = this.g1; i < g; i++)  // block index, i
+					for (let n = 0; n < 8; n++)
+						permuted[dest++] = matrix[blocks[i].data + 8 * offset + n];
 		}
 
 		// error correction rows come next 
-		for (let offset = 0; offset < 8 * this.E; offset++)
+		for (let offset = 0; offset < this.E; offset++)
 			for (let i = 0; i < g; i++)  // block index, i (E is the same for all blocks)
-				permuted[dest++] = matrix[blocks[i].ec + offset];
+				for (let n = 0; n < 8; n++)  // bit n
+					permuted[dest++] = matrix[blocks[i].ec + 8 * offset + n];
 
 		return permuted;
 	}
