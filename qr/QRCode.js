@@ -534,10 +534,10 @@ export class QRCode {
 	get size() { return 8 * this.codewords; }
 
 	/** Error correction bits needed for full message. */
-	get ecBits() { return this.E * (this.g1 + this.g2); }
+	get ecBits() { return 8 * this.E * (this.g1 + this.g2); }
 
 	/** Number of remainder bits needed (if any) after error correection, just before modual placment. */
-	get remainderBits() { QRCode.remainderBits(this); }
+	get remainderBits() { return QRCode.remainderBits(this); }
 
 	/**
 	 * Generates the standard padding per QR Code spec., ISO 18004.
@@ -590,23 +590,23 @@ export class QRCode {
 		const cols = this.size;
 		let matrix = contiguousTensor(Uint8Array, [rows, cols]);
 
-		const g = this.g1 + this.g2;  // tota number of blocks
+		const g = this.g1 + this.g2;  // total number of blocks
 		const kMax = Math.max(this.k1, this.k2);
 
 		// Build block-diagonal matrix, which models performing Reed-Solomon error correction on each block seperately.
-		// Error bits are the 8E rows at the end of each block.
+		// Error bits are the 8*E rows at the end of each block.
 		let blocks = new Array(g);  // { data: row index for data, ec: row index for error correction }
 		{	let i = 0;
 			let r = 0;  // cumulative row position
 			let c = 0;  // cumulative column position
 			for (; i < this.g1; i++) {
-				blocks[i] = { data: r, ec: r + this.k1 }
+				blocks[i] = { data: r, ec: r + 8 * this.k1 }
 				let submatrix_i = ReedSolomon.matrix(this.k1, this.E);
 				[r, c] = appendMatrix(submatrix_i, matrix, r, c);
 			}
 			for (; i < g; i++) {
-				blocks[i] = { data: r, ec: r + this.k2 }
-				let submatrix_i = ReedSolomon.matrix(this.k2, this.E)
+				blocks[i] = { data: r, ec: r + 8 * this.k2 }
+				let submatrix_i = ReedSolomon.matrix(this.k2, this.E);;
 				[r, c] = appendMatrix(submatrix_i, matrix, r, c);
 			}
 		}
@@ -616,20 +616,20 @@ export class QRCode {
 		let dest = 0;  // row index
 		
 		// data rows comes first
-		for (let offset = 0; offset < kMax; offset++) {
+		for (let offset = 0; offset < 8 * kMax; offset++) {
 			let i = 0;
-			if (offset < this.k1)  // add one data row from each block in group 1
+			if (offset < 8 * this.k1)  // add one data row from each block in group 1
 				for (; i < this.g1; i++)  // block index, i
 					permuted[dest++] = matrix[blocks[i].data + offset];
-			if (offset < this.k2)  // add one data row from each block in group 2
+			if (offset < 8 * this.k2)  // add one data row from each block in group 2
 				for (; i < g; i++)  // block index, i
 					permuted[dest++] = matrix[blocks[i].data + offset];
 		}
 
 		// error correction rows come next 
-		for (let offset = 0; offset < this.E; offset++)
+		for (let offset = 0; offset < 8 * this.E; offset++)
 			for (let i = 0; i < g; i++)  // block index, i (E is the same for all blocks)
-				permuted[dest++] = matrix[block[i].ec + offset];
+				permuted[dest++] = matrix[blocks[i].ec + offset];
 
 		return permuted;
 	}

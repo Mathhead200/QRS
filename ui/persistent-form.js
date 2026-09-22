@@ -6,11 +6,18 @@ const fields = ["#version", "#ecLevel", "#mask", "#mode", "#data", "#suffix", "#
 for (let ele of fields) {
 	// load saved values
 	let value = localStorage.getItem(ele.id);
-	if (value !== null)
-		ele.value = value;
+	if (value !== null) {
+		if (ele.type === "checkbox")
+			ele.checked = (value === "true");
+		else
+			ele.value   = value;
+	}
 
 	// save values when fields change
-	ele.addEventListener("change", () => localStorage.setItem(ele.id, ele.value));
+	if (ele.type === "checkbox")
+		ele.addEventListener("change", () => localStorage.setItem(ele.id, ele.checked));
+	else
+		ele.addEventListener("change", () => localStorage.setItem(ele.id, ele.value));
 }
 
 // delete saved values on form reset

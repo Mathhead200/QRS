@@ -3,6 +3,7 @@ import { Module, RenderedQRCode } from "../qr/RenderedQRCode.js"
 import { DataSegment, NullSegment, QRCode, Segment, appendBuffer } from "../qr/QRCode.js";
 import { EncodeData } from "../qr/EncodeData.js"
 import { DataSize } from "../qr/DataSize.js";
+import { GF2 } from "../qr/GF2.js"
 
 const UTF8 = new TextEncoder();
 
@@ -126,16 +127,21 @@ function updateQR() {
 		const p = (padding) ? new Array(qrSize - s.size - eom.size).fill(null) : null;
 
 		// build QRCode
-		bits = new QRCode(version, ecLevel, [s, eom], p).bitStream();
+		let qr = new QRCode(version, ecLevel, [s, eom], p);
+		bits = qr.bitStream();
 
-		// TODO: calculate and render error bits where full defined
+		// calculate and render error bits where full defined
+		bits = GF2.vector_mul(qr.ecMatrix(), bits);
+
+		// add remainder bits
+		bits.push(...new Uint8Array(qr.remainderBits));
 
 	} catch (ex) {
 		fields.data.classList.add("error");
 		console.error(ex);  // DEBUG
 	}
 	let maskAt = !Number.isNaN(mask) ? RenderedQRCode._MASKS[mask] : (i, j) => false;  // predicate
-
+	
 	for (let i = 0; i < qr.size; i++) {
 		for (let j = 0; j < qr.size; j++) {
 			let m = qr.modules[i][j];
@@ -144,7 +150,7 @@ function updateQR() {
 			if (m.tag === Module.DATA) {
 				if (m.index < bits.length) {
 					m.color = bits[m.index];
-					if (m.color != null && maskAt(i, j))
+					if (m.color !== null && maskAt(i, j))
 						m.color = 1 - m.color;
 				} else {
 					m.color = null;
