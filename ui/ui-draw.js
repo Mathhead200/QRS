@@ -2,8 +2,10 @@
 const form = document.querySelector("form#info");
 const svg = document.querySelector("svg#qrcode");
 
+let qrUpdate = null;  // store .detail from last QRUpdate, contains e.g. (RenderedQRCode) qr
+
 let modules = [];
-let eventListeners = [];  // parallel 2d-array to modules storing event listeners as objects, { eventType: f }
+let eventListeners = [];  // parallel 2d-array to qrUpdate.modules storing event listeners as objects, { eventType: f }
 let size = 0;
 
 let edits = loadEdits();  // user edited modules: map: `${i},${j}` -> color, where "0,0" is an "anchor" point, e.g. the center of the qrcode	
@@ -17,7 +19,9 @@ let penColor = null;  // what color, if any, is currently being drawn
 
 // capture CustomEvent
 svg.addEventListener("QRUpdate", event => {
-	modules = event.detail.modules;
+	qrUpdate = event.detail;
+	
+	modules = qrUpdate.modules;
 	size = modules.length;
 	[i0, j0] = anchor(size);  // offsets
 
@@ -33,13 +37,14 @@ svg.addEventListener("QRUpdate", event => {
 
 	updateUIControls();
 	draw();
+	dispatchQRDrawEvent();
 });
 
 // (re)initialize nessesary ui controls as event listeners on SVG elements
 function updateUIControls() {
 	for (let i = 0; i < size; i++)
 		for (let j = 0; j < size; j++) {
-			const rect = modules[i][j];
+			const rect = modules[i][j];  // e.g. <rect>
 			const listeners = eventListeners[i][j];
 
 			// remove any old event listeners
@@ -108,6 +113,7 @@ document.addEventListener("mouseup", event => {
 	event.preventDefault();
 	penColor = null;
 	saveEdits();  // save on mouseup to avoid saving on every mouseover event during drags for smoother UX.
+	dispatchQRDrawEvent();
 });
 
 // Translate edits
@@ -135,6 +141,7 @@ document.addEventListener("keydown", event => {
 		edits = translated;
 		draw();
 		saveEdits();
+		dispatchQRDrawEvent();
 	}
 });
 
@@ -178,5 +185,13 @@ function loadEdits() {
 	return new Map(str.split("; ").map(tri => {
 		const [i, j, color] = tri.split(",", 3);
 		return [`${i},${j}`, color];
+	}));
+}
+
+function dispatchQRDrawEvent() {
+	svg.dispatchEvent(new CustomEvent("QRDraw", {
+		detail: { qrUpdate, modules, eventListeners, size, edits, anchor, i0, j0, penColor },
+		bubbles: true,
+		cancelable: true
 	}));
 }

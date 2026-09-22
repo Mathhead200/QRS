@@ -1,6 +1,6 @@
 
 const form = document.querySelector("form#info");
-const fields = ["#version", "#ecLevel", "#mask", "#mode", "#data", "#suffix", "#padding"]
+const fields = ["#version", "#ecLevel", "#mask", "#mode", "#data", "#suffix", "#padding", "#remainder"]
 	.map(q =>form.querySelector(q));
 
 for (let ele of fields) {

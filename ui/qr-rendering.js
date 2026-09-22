@@ -9,7 +9,7 @@ const UTF8 = new TextEncoder();
 
 const form = document.querySelector("form#info");
 const fields = Object.fromEntries(
-	["#version", "#ecLevel", "#mask", "#mode", "#data", "#suffix", "#padding"]
+	["#version", "#ecLevel", "#mask", "#mode", "#data", "#suffix", "#padding", "#remainder"]
 		.map(q => form.querySelector(q))
 		.map(ele => [ele.id, ele])
 );
@@ -59,6 +59,7 @@ function updateQR() {
 	const data = fields.data.value;
 	const suffix = +fields.suffix.value;
 	const padding = fields.padding.checked;
+	const remainder = fields.remainder.checked;
 
 	// color format and version modules
 	const RESERVED = -1;  // a special reserved "color"
@@ -72,6 +73,10 @@ function updateQR() {
 	
 	// encode data and build QRCode so we can color data modules
 	let bits = [];  // bit stream
+	let qrc = null;  // QRCode
+	let qrcBitStream = null;
+	let ecMatrix = null;
+	let error = null;  // exception
 	fields.data.classList.remove("error");
 	try {
 		// encode data, and determine suffix size
@@ -127,16 +132,18 @@ function updateQR() {
 		const p = (padding) ? new Array(qrSize - s.size - eom.size).fill(null) : null;
 
 		// build QRCode
-		let qrc = new QRCode(version, ecLevel, [s, eom], p);
-		bits = qrc.bitStream();
+		qrc = new QRCode(version, ecLevel, [s, eom], p);
+		bits = qrcBitStream = qrc.bitStream();
 
 		// calculate and render error bits where full defined
-		bits = GF2.vector_mul(qrc.ecMatrix(), bits);
+		ecMatrix = qrc.ecMatrix();
+		bits = GF2.vector_mul(ecMatrix, bits);
 
 		// add remainder bits
-		bits.push(...new Uint8Array(qrc.remainderBits));
+		bits.push(...new Array(qrc.remainderBits).fill(remainder ? null : 0));
 
 	} catch (ex) {
+		error = ex;
 		fields.data.classList.add("error");
 		console.error(ex);  // DEBUG
 	}
@@ -170,7 +177,7 @@ function updateQR() {
 
 	// dispatch custom event, "QRUpdate"
 	svg.dispatchEvent(new CustomEvent("QRUpdate", {
-		detail: { modules, qr, version, ecLevel, mask, mode, data, suffix, padding, bits },
+		detail: { modules, qr, version, ecLevel, mask, mode, data, suffix, padding, remainder, qrc, qrcBitStream, ecMatrix, bits, error },
 		bubbles: true,
 		cancelable: true
 	}));
@@ -191,3 +198,4 @@ fields.data.addEventListener("input", () => updateQR());
 fields.data.addEventListener("change", () => updateQR());
 fields.suffix.addEventListener("change", () => updateQR());
 fields.padding.addEventListener("change", () => updateQR());
+fields.remainder.addEventListener("change", () => updateQR());

@@ -8,6 +8,7 @@
 	<script src="ui/persistent-form.js" type="module" defer></script>  <!-- Should come before QR render so info can be loaded. -->
 	<script src="ui/qr-rendering.js" type="module" defer></script>
 	<script src="ui/partitions-view.js" type="module" defer></script>
+	<script src="ui/qr-solver.js" type="module" defer></script> <!-- Should be before ui-draw to attach QRUpdate to the solver first. This ensures QRUpdate is handled before QRDraw. -->
 	<script src="ui/ui-draw.js" type="module" defer></script>
 </head>
 <body>
@@ -30,6 +31,7 @@
 			<label> Data: <textarea id="data" type="text" placeholder="example.com?"></textarea> </label>
 			<label> Suffix Length: <input id="suffix" type="number" min="0" value="0"> </label>
 			<label> Hack Padding: <input id="padding" type="checkbox"> </label>
+			<label> Hack Remainder Bits: <input id="remainder" type="checkbox"> </label>
 			<div id="partitions">
 				<div id="header-bits"></div>    <!-- Segment Header: mode, and character count   -->
 				<div id="data-bits"></div>      <!-- (Fixed) Data                                -->
