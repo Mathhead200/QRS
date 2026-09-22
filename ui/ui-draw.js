@@ -1,4 +1,5 @@
 
+const form = document.querySelector("form#info");
 const svg = document.querySelector("svg#qrcode");
 
 let modules = [];
@@ -34,6 +35,73 @@ svg.addEventListener("QRUpdate", event => {
 	draw();
 });
 
+// (re)initialize nessesary ui controls as event listeners on SVG elements
+function updateUIControls() {
+	for (let i = 0; i < size; i++)
+		for (let j = 0; j < size; j++) {
+			const rect = modules[i][j];
+			const listeners = eventListeners[i][j];
+
+			// remove any old event listeners
+			for (const e of ["mousedown", "mouseover", "contextmenu"])  // event types
+				if (listeners[e]) {
+					rect.removeEventListener(e, listeners[e]);
+					listeners[e] = null;
+				}
+
+			// add new event listeners
+			if (rect.classList.contains("empty")) {
+
+				const saveEdit = () => {
+					const ij = `${i - i0},${j - j0}`;
+					if (penColor !== "")
+						edits.set(ij, penColor);
+					else
+						edits.delete(ij);
+					saveEdits();
+				};
+
+				rect.addEventListener("mousedown", listeners["mousedown"] = event => {
+					const { button } = event;
+					if (button !== 0 && button !== 2)  // left or right click (respectively)
+						return;
+					event.preventDefault();
+					penColor = "";
+					if (button === 0) {  // left click: BLACK -> WHITE -> null -> BLACK -> ...
+						if (rect.classList.contains("black"))
+							rect.classList.replace("black", penColor = "white");
+						else if (rect.classList.contains("white"))
+							rect.classList.remove("white");
+						else
+							rect.classList.add(penColor = "black");
+					} else {  // right click: WHITE -> BLACK -> null -> WHITE -> ...
+						if (rect.classList.contains("white"))
+							rect.classList.replace("white", penColor = "black");
+						else if (rect.classList.contains("black"))
+							rect.classList.remove("black");
+						else
+							rect.classList.add(penColor = "white");
+					}
+					saveEdit();
+				});
+
+				rect.addEventListener("mouseover", listeners["mouseover"] = event => {
+					if (penColor === null)
+						return;
+					event.preventDefault();
+					rect.classList.remove("white", "black");
+					if (penColor !== "")
+						rect.classList.add(penColor);
+					saveEdit();
+				});
+
+				rect.addEventListener("contextmenu", listeners["contextmenu"] = event => {
+					event.preventDefault();
+				});
+			}
+		}
+}
+
 // Stop drawing. Added to document in case mouse gets moved off the <svg> canvas.
 document.addEventListener("mouseup", event => {
 	if (penColor === null)
@@ -45,7 +113,7 @@ document.addEventListener("mouseup", event => {
 // Translate edits
 document.addEventListener("keydown", event => {
 	const { key } = event;
-	if (!["ArrowLeft", "ArrowUp", "ArrowRight", "ArrowDown", "Shift"].includes(key))
+	if (!["ArrowLeft", "ArrowUp", "ArrowRight", "ArrowDown", "Shift"].includes(key) || form.contains(document.activeElement))
 		return;
 	event.preventDefault();
 
@@ -69,68 +137,6 @@ document.addEventListener("keydown", event => {
 		saveEdits();
 	}
 });
-
-// (re)initialize nessesary ui controls as event listeners on SVG elements
-function updateUIControls() {
-	for (let i = 0; i < size; i++)
-		for (let j = 0; j < size; j++) {
-			const rect = modules[i][j];
-			const listeners = eventListeners[i][j];
-
-			// remove any old event listeners
-			for (const e of ["mousedown", "mouseover", "contextmenu"])  // event types
-				if (listeners[e]) {
-					rect.removeEventListener(e, listeners[e]);
-					listeners[e] = null;
-				}
-
-			// add new event listeners
-			if (rect.classList.contains("empty")) {
-
-				rect.addEventListener("mousedown", listeners["mousedown"] = event => {
-					const { button } = event;
-					if (button !== 0 && button !== 2)  // left or right click (respectively)
-						return;
-					event.preventDefault();
-					penColor = "";
-					if (button === 0) {  // left click: BLACK -> WHITE -> null -> BLACK -> ...
-						if (rect.classList.contains("black"))
-							rect.classList.replace("black", penColor = "white");
-						else if (rect.classList.contains("white"))
-							rect.classList.remove("white");
-						else
-							rect.classList.add(penColor = "black");
-					} else {  // right click: WHITE -> BLACK -> null -> WHITE -> ...
-						if (rect.classList.contains("white"))
-							rect.classList.replace("white", penColor = "black");
-						else if (rect.classList.contains("black"))
-							rect.classList.remove("black");
-						else
-							rect.classList.add(penColor = "white");
-					}
-					const ij = `${i - i0},${j - j0}`;
-					if (penColor !== "")
-						edits.set(ij, penColor);
-					else
-						edits.delete(ij);
-					saveEdits();
-				});
-
-				rect.addEventListener("mouseover", listeners["mouseover"] = event => {
-					if (penColor === null)
-						return;
-					event.preventDefault();
-					rect.classList.remove("white", "black");
-					if (penColor !== "")
-						rect.classList.add(penColor);
-				});
-
-				rect.addEventListener("contextmenu", listeners["contextmenu"] = event => {
-					event.preventDefault();
-				});
-			}
-		}
-}
 
 // (re)draw edited modules
 function draw() {
