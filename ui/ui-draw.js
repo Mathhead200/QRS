@@ -52,13 +52,12 @@ function updateUIControls() {
 			// add new event listeners
 			if (rect.classList.contains("empty")) {
 
-				const saveEdit = () => {
+				const updateEdits = () => {
 					const ij = `${i - i0},${j - j0}`;
 					if (penColor !== "")
 						edits.set(ij, penColor);
 					else
 						edits.delete(ij);
-					saveEdits();
 				};
 
 				rect.addEventListener("mousedown", listeners["mousedown"] = event => {
@@ -82,7 +81,7 @@ function updateUIControls() {
 						else
 							rect.classList.add(penColor = "white");
 					}
-					saveEdit();
+					updateEdits();
 				});
 
 				rect.addEventListener("mouseover", listeners["mouseover"] = event => {
@@ -92,7 +91,7 @@ function updateUIControls() {
 					rect.classList.remove("white", "black");
 					if (penColor !== "")
 						rect.classList.add(penColor);
-					saveEdit();
+					updateEdits();
 				});
 
 				rect.addEventListener("contextmenu", listeners["contextmenu"] = event => {
@@ -108,6 +107,7 @@ document.addEventListener("mouseup", event => {
 		return;
 	event.preventDefault();
 	penColor = null;
+	saveEdits();  // save on mouseup to avoid saving on every mouseover event during drags for smoother UX.
 });
 
 // Translate edits
