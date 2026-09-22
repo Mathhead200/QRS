@@ -86,7 +86,7 @@ form.addEventListener("submit", event => {
 		for (let i = 0; i < T.length; i++)
 			if (i !== j && T[i][j] !== 0) {
 				T[i] = GF2.vector_add(T[i], T[j]);  // row-(multiply)-add, row_i += row_j
-				y[i] = GF2.add(y[i], y[j]);
+				y[i] = GF2.add(y[i], y[j]);  // TODO: track nulls here
 			}
 	}
 
