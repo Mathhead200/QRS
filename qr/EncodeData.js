@@ -61,7 +61,7 @@ export class EncodeData {
 	 * @see https://www.thonky.com/qr-code-tutorial/alphanumeric-table
 	 */
 	static alphanumeric(str) {
-		const charset = "0123456789ABCDEFGHIJKLMNOPQRSTUVQXYZ $%*+-./:";
+		const charset = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:";
 		const map = new Map();
 		[...charset].forEach((c, i) => map.set(c, i));
 

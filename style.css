@@ -55,17 +55,21 @@ form#info .error {
 #partitions #remainder-bits { background-color: #F5EEFE; }
 
 svg#qrcode {
+	--fill: transparent;
 	width: calc(min(95vw, 100vh));
 	height: calc(min(95vw, 100vh));
 	background-color: white;
 }
-
-svg#qrcode .white { fill: white; }
-svg#qrcode .black { fill: black; }
-svg#qrcode .reserved { fill: brown; }
+svg#qrcode rect {
+	fill: var(--fill);
+	stroke: var(--fill);
+}
+svg#qrcode .white { --fill: white; }
+svg#qrcode .black { --fill: black; }
+svg#qrcode .reserved { --fill: brown; }
 
 svg#qrcode .empty {
-	fill: #977D6C;  /* lightsalmon */
+	--fill: #977D6C;  /* lightsalmon */
 	cursor: pointer;
 }
-svg#qrcode .empty.odd { fill: #D3C9BB; }  /* coral */
+svg#qrcode .empty.odd { --fill: #D3C9BB; }  /* coral */

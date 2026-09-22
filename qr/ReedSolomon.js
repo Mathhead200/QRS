@@ -29,7 +29,7 @@ export class ReedSolomon {
 			// polynomial division
 			while (rem.length > E) {  // Basis stores the remainder as we proceed with the division algorithm. Stop when the degree of the remainder gets too small. e.g. deg(basis) == basis.length - 1 == 4 > (E=2)
 				if (rem[0] !== 0)     // Skip this divide-multiply-subtract step if leading term is 0.
-					for (let i = E - 1; i >= 0; i--)  // generator[0] is always 1, so skip division for efficiency. NOTE: loop is backwards to avoid thrashing rem[0]!
+					for (let i = E; i >= 0; i--)  // generator[0] is always 1, so skip division for efficiency. NOTE: loop is backwards to avoid thrashing rem[0]!
 						rem[i] ^= gf.mul(rem[0], generator[i]);  // Multiply leading term of remainder (basis[0]) by divisor (generator), and subtract (XOR) to get the new remainder. e.g. [(0x01)x^4 + ...] - (0x01) * [(0x01)x^2 + (0x03)x + (0x02)] = [(0x01)x^4 + (0x00)x^3 + (0x01)x^2 + (0x03)x + (0x02)]
 				rem.shift();  // Remove leading term. This is the quotient, and we don't care about it. e.g. shift (0x01)x^4 --> basis = (0x00)x^3 + (0x01)x^2 + (0x03)x + (0x02)
 			}  // Repeat, e.g. next iteration will skip since (0x00)x^3 is 0, and obly shift off that term, etc. 
