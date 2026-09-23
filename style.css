@@ -67,6 +67,10 @@ svg#qrcode .empty {
 	cursor: pointer;
 }
 svg#qrcode .empty.odd { --fill: #D3C9BB; }  /* coral */
+svg#qrcode .independent { --fill: green; }
+svg#qrcode .independent.odd { --fill: lime; }
+svg#qrcode .inconsistent { --fill: red; }
+svg#qrcode .inconsistent.odd { --fill: pink; }
 svg#qrcode .white, svg#qrcode .white.odd { --fill: white; }
 svg#qrcode .black, svg#qrcode .black.odd { --fill: black; }
 svg#qrcode .reserved { --fill: brown; }
