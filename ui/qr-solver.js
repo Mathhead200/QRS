@@ -8,6 +8,7 @@ const cmap = new Map([
 
 const form = document.querySelector("form#info");
 const solve = form.querySelector("[type=submit]");
+const status = form.querySelector("#status");
 
 const svg = document.querySelector("svg#qrcode");
 
@@ -166,7 +167,7 @@ form.addEventListener("submit", event => {
 		if (x_j !== null)
 			indVars.delete(j);
 	});
-	showSolutions(indVars);
+	showSolutions(coef, dy, pivots, indVars);
 
 	if (_DEBUG) {  // DEBUG:
 		console.log(event);
@@ -180,16 +181,64 @@ form.addEventListener("submit", event => {
 /**
  * @param {Set<number>} indVars Set of indicies
  */
-function showSolutions(indVars) {
-	const { qr, modules } = qrUpdate;
-	qr.forEach((m, i, j) => {
-		const rect = modules[i][j];
-		if (m.tag == Module.DATA) {
-			rect.classList.remove("independent", "inconsistent");
-			if (indVars.has(m.index))
-				rect.classList.add("independent");
+function showSolutions(coef, dy, pivots, indVars) {
+	console.log("Independent vars:", indVars);
+	const btn = document.createElement("input");
+	btn.type = "button";
+	btn.value = "Random Solution";
+	btn.addEventListener("click", () => {
+		const { qrc, ecMatrix, qr, modules } = qrUpdate;
+
+		// start with any given fixed values
+		const x0 = [...x];
+
+		// pick random values for free variables
+		for (let j of indVars)
+			x0[j] = Math.floor(2 * Math.random());
+
+		// calculate determined values for pivots
+		for (let [i, j] of pivots) {
+			x0[j] = dy.get(i);
+			const row_i = coef.get(i);
+			for (let col = 0; col < x.length; col++)
+				if (col !== j && row_i[col] === 1)
+					x0[j] = GF2.add(x0[j], x0[col]);
 		}
+
+		console.assert(x0.every(x0_j => x0_j !== null));  // DEBUG
+		
+		// TODO: update data field with decoded suffix characters
+
+		// apply EC transformation
+		let y0 = GF2.vector_mul(ecMatrix, x0);
+
+		// add remainder bits
+		y0.push(...new Uint8Array(qrc.remainderBits));  // TODO: (stub, all 0's) Get user drawn pixels or generate randomly
+
+		// apply mask
+		y0 = GF2.vector_add(y0, m);
+
+		// draw
+		qr.forEach((m, i, j) => {
+			if (m.tag == Module.DATA) {
+				const rect = modules[i][j];
+				switch(m.color = y0[m.index]) {
+					case Module.WHITE:
+						rect.classList.remove("black");
+						rect.classList.add("white");
+						break;
+					case Module.BLACK:
+						rect.classList.remove("white");
+						rect.classList.add("black");
+						break;
+					default:
+						console.assert(false);  // DEBUG
+				}
+			}
+		});
 	});
+	status.innerHTML = `${indVars.size} free bits &rarr;`;
+	status.append(btn);
 }
 
 /**
@@ -197,15 +246,5 @@ function showSolutions(indVars) {
  */
 function reportInconsistencies(...indices) {
 	console.warn("Inconsistant data bits @", indices);
-
-	const { qr, modules } = qrUpdate;
-	indices = new Set(indices);
-	qr.forEach((m, i, j) => {
-		const rect = modules[i][j];
-		if (m.tag == Module.DATA) {
-			rect.classList.remove("independent", "inconsistent");
-			if (indices.has(m.index))
-				rect.classList.add("inconsistent");
-		}
-	});
+	status.innerText = `${indices.length} too many bits!`;
 }
